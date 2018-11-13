@@ -16,19 +16,19 @@ let settings
 let channel
 
 const exchanges = [];
-const exchangesOrderBooks = new SortedMap();
+const internalOrderBooksMap = new SortedMap();
 
 // There are 4 form of order books:
 // 1. CCXWS
 // 2. CCXT
-// 3. Internal (optimized for quick update, in 'exchangesOrderBooks' variable)
+// 3. Internal (optimized for quick update - with sorted map for asks and bids, stored in the 'internalOrderBooksMap' variable)
 // 4. Publishing to queue common format
 
 (async function main() {
     settings = await getSettings()
     channel = await getRabbitMqChannel(settings)
 
-    produceExchangesData()
+    subscribeToExchangesData()
 
     startWebServer()
 })();
@@ -66,16 +66,16 @@ function startWebServer() {
 }
 
 
-async function produceExchangesData() {
+async function subscribeToExchangesData() {
     const exchanges = settings.CcxwsExchangeConnector.Main.Exchanges
     const symbols = settings.CcxwsExchangeConnector.Main.Symbols
 
     await Promise.all(exchanges.map (exchangeName =>
-        produceExchangeData(exchangeName, symbols)
+        subscribeToExchangeData(exchangeName, symbols)
     ))
 }
 
-async function produceExchangeData(exchangeName, symbols){
+async function subscribeToExchangeData(exchangeName, symbols){
 
     const exchange = new ccxt[exchangeName]()
     const exchange_ws = exchangesMapping.MapExchangeCcxtToCcxws(exchangeName)
@@ -95,8 +95,8 @@ async function produceExchangeData(exchangeName, symbols){
         return
     }
 
-    exchange_ws.on("l2snapshot", orderBook => updateOrderBook(orderBook, null))
-    exchange_ws.on("l2update", update => updateOrderBook(null, update))
+    exchange_ws.on("l2snapshot", orderBook => l2snapshotEventHandle(orderBook))
+    exchange_ws.on("l2update", update => l2updateEventHandle(update))
 
     availableMarkets.forEach(market => {
         exchange_ws.subscribeLevel2Updates(market)
@@ -130,20 +130,23 @@ function getAvailableMarketsForExchange(exchange, symbols) {
 }
 
 
-
-function updateOrderBook(orderBook, update)
+function l2snapshotEventHandle(orderBook)
 {
-    if (update === null) {
-        const key = getKey(orderBook)
-        const ob = mapToInternal(orderBook)
-        exchangesOrderBooks.set(key, ob)
-        return
-    }
+    const key = getKey(orderBook)
+    const internalOrderBook = mapCcxwsToInternal(orderBook)
+    internalOrderBooksMap.set(key, internalOrderBook)
 
+    const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
+    publishOrderBook(publishingOrderBook)
+    publishTickPrice(publishingOrderBook)
+}
+
+function l2updateEventHandle(update)
+{
     const key = getKey(update);
-    orderBook = exchangesOrderBooks.get(key)
+    const internalOrderBook = internalOrderBooksMap.get(key)
 
-    if (!orderBook) {
+    if (!internalOrderBook) {
         console.log('OrderBook ' + key + ' is not found.')
         return
     } 
@@ -152,36 +155,36 @@ function updateOrderBook(orderBook, update)
         const updateAskPrice = parseFloat(ask.price)
         const updateAskSize = parseFloat(ask.size)
 
-        orderBook.asks.del(updateAskPrice)
+        internalOrderBook.asks.del(updateAskPrice)
 
         if (updateAskSize !== 0)
-            orderBook.asks.set(updateAskPrice, updateAskSize)
+            internalOrderBook.asks.set(updateAskPrice, updateAskSize)
     });
 
     update.bids.forEach(bid => {
         const updateBidPrice = parseFloat(bid.price)
         const updateBidSize = parseFloat(bid.size)
 
-        orderBook.bids.del(updateBidPrice)
+        internalOrderBook.bids.del(updateBidPrice)
 
         if (updateBidSize !== 0)
-            orderBook.bids.set(updateBidPrice, updateBidSize)
+            internalOrderBook.bids.set(updateBidPrice, updateBidSize)
     });
 
-    orderBook.timestamp = moment.utc()
+    internalOrderBook.timestamp = moment.utc()
 
-    const mappedOrderBook = mapToPublishing(orderBook)
-    publishOrderBook(mappedOrderBook)
-    publishTickPrice(mappedOrderBook)
+    const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
+    publishOrderBook(publishingOrderBook)
+    publishTickPrice(publishingOrderBook)
 }
 
-function getKey(orderBook) {
-    return orderBook.exchange.toLowerCase() + "_" + orderBook.marketId
+function getKey(ccxwsOrderBook) {
+    return ccxwsOrderBook.exchange.toLowerCase() + "_" + ccxwsOrderBook.marketId
 }
 
-function mapToInternal(orderBook) {
+function mapCcxwsToInternal(ccxwsOrderBook) {
     const asks = new SortedMap();
-    orderBook.asks.forEach(ask => {
+    ccxwsOrderBook.asks.forEach(ask => {
         const askPrice = parseFloat(ask.price)
         const askSize = parseFloat(ask.size)
 
@@ -189,49 +192,49 @@ function mapToInternal(orderBook) {
     })
 
     const bids = new SortedMap();
-    orderBook.bids.forEach(bid => {
+    ccxwsOrderBook.bids.forEach(bid => {
         const bidPrice = parseFloat(bid.price)
         const bidSize = parseFloat(bid.size)
 
         bids.set(bidPrice, bidSize)
     })
 
-    const result = {}
-    result.source = orderBook.exchange
-    result.assetPair = orderBook.marketId
-    result.asks = asks
-    result.bids = bids
+    const internalOrderBook = {}
+    internalOrderBook.source = ccxwsOrderBook.exchange
+    internalOrderBook.assetPair = ccxwsOrderBook.marketId
+    internalOrderBook.asks = asks
+    internalOrderBook.bids = bids
     // Some exchanges don't have a timestamp, as an example - Poloniex, shall be investigated
-    result.timestamp = moment.utc()
+    internalOrderBook.timestamp = moment.utc()
     
-    return result
+    return internalOrderBook
 }
 
-function mapToPublishing(orderBook){
+function mapInternalToPublishing(internalOrderBook){
     
     const exchange = exchanges.find(ex => { 
-        return ex.name.toLowerCase() === orderBook.source.toLowerCase()
+        return ex.name.toLowerCase() === internalOrderBook.source.toLowerCase()
     })
-    const symbol = mapping.TryToMapSymbolBackward(orderBook.assetPair, exchange, settings)
+    const symbol = mapping.TryToMapSymbolBackward(internalOrderBook.assetPair, exchange, settings)
 
     const base = symbol.substring(0, symbol.indexOf('/'))
     const quote = symbol.substring(symbol.indexOf("/") + 1)
     const suffixConfig = settings.CcxwsExchangeConnector.Main.ExchangesNamesSuffix
     const suffix = suffixConfig ? suffixConfig : "(w)"
     const source = exchange.name.replace(exchange.version, "").trim()
-    const orderBookObj = {}
-    orderBookObj.source = source + suffix
-    orderBookObj.asset = symbol.replace("/", "")
-    orderBookObj.assetPair = { 'base': base, 'quote': quote }
-    orderBookObj.timestamp = orderBook.timestamp.toISOString()
+    const publishingOrderBook = {}
+    publishingOrderBook.source = source + suffix
+    publishingOrderBook.asset = symbol.replace("/", "")
+    publishingOrderBook.assetPair = { 'base': base, 'quote': quote }
+    publishingOrderBook.timestamp = internalOrderBook.timestamp.toISOString()
 
-    const descOrderedBidsPrices = Array.from(orderBook.bids.keys())
+    const descOrderedBidsPrices = Array.from(internalOrderBook.bids.keys())
                                        .sort(function(a, b) { return b-a; })
     const bids = []
     for(let price of descOrderedBidsPrices) {
         if (price == 0)
             continue
-        let size = orderBook.bids.get(price)
+        let size = internalOrderBook.bids.get(price)
         if (size == 0)
             continue
 
@@ -240,15 +243,15 @@ function mapToPublishing(orderBook){
 
         bids.push({ 'price': price, 'volume': size })
     }
-    orderBookObj.bids = bids
+    publishingOrderBook.bids = bids
 
-    const ascOrderedAsksPrices = Array.from(orderBook.asks.keys())
+    const ascOrderedAsksPrices = Array.from(internalOrderBook.asks.keys())
                                        .sort(function(a, b) { return a-b; })
     const asks = []
     for(let price of ascOrderedAsksPrices) {
         if (price == 0)
             continue
-        let size = orderBook.asks.get(price)
+        let size = internalOrderBook.asks.get(price)
         if (size == 0)
             continue
 
@@ -257,9 +260,9 @@ function mapToPublishing(orderBook){
 
         asks.push({ 'price': price, 'volume': size })
     }
-    orderBookObj.asks = asks
+    publishingOrderBook.asks = asks
 
-    return orderBookObj
+    return publishingOrderBook
 }
 
 // TODO: next methods must be refactored
@@ -278,7 +281,7 @@ function publishTickPrice(orderBook) {
 
     sendToRabitMQ(settings.CcxwsExchangeConnector.RabbitMq.TickPrices, tickPrice)
 
-    log("TP: %s %s %s, bid[0]: %s, ask[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
+    log("TP: %s %s %s, bids[0]: %s, asks[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
 }
 
 function sendToRabitMQ(rabbitExchange, object) {
@@ -295,13 +298,13 @@ function sendToRabitMQ(rabbitExchange, object) {
     }
 }
 
-function mapOrderBookToTickPrice(orderBook) {
+function mapOrderBookToTickPrice(publishingOrderBook) {
     const tickPrice = {}
-    tickPrice.source = orderBook.source
-    tickPrice.asset = orderBook.asset
-    tickPrice.timestamp = orderBook.timestamp
-    const bestBid = orderBook.bids.length ? orderBook.bids[0] : undefined
-    const bestAsk = orderBook.asks.length ? orderBook.asks[0] : undefined
+    tickPrice.source = publishingOrderBook.source
+    tickPrice.asset = publishingOrderBook.asset
+    tickPrice.timestamp = publishingOrderBook.timestamp
+    const bestBid = publishingOrderBook.bids.length ? publishingOrderBook.bids[0] : undefined
+    const bestAsk = publishingOrderBook.asks.length ? publishingOrderBook.asks[0] : undefined
     if (!bestBid || !bestAsk) {
         return null
     }
