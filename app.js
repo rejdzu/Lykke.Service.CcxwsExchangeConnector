@@ -18,6 +18,11 @@ let channel
 const exchanges = [];
 const exchangesOrderBooks = new SortedMap();
 
+// There are 4 form of order books:
+// 1. CCXWS
+// 2. CCXT
+// 3. Internal (optimized for quick update, in 'exchangesOrderBooks' variable)
+// 4. Publishing to queue common format
 
 (async function main() {
     settings = await getSettings()
@@ -103,12 +108,18 @@ function getAvailableMarketsForExchange(exchange, symbols) {
     
     for (const symbol of symbols) {
         let market = exchange.findMarket(mapping.MapAssetForward(symbol, settings))
+        // Inversed - first trying to map, then try to use original
+        // Example:
+        // in cofig symbols = BTC/USD, mapping = USD -> USDT
+        // logic: first try to find BTC/USDT, then BTC/USD
+        // because of Poloniex which ccxt shows has BTC/USD,
+        // but it doesn't work, BTC/USDT works.
         const exchangeHasMapped = typeof market === "object"
         if (exchangeHasMapped) {
             result.push(market)
         } else {
             market = exchange.findMarket(symbol)
-            const exchangeHas = typeof market === "object" 
+            const exchangeHas = typeof market === "object"
             if (exchangeHas) {
                 result.push(market)
             }
@@ -124,7 +135,7 @@ function updateOrderBook(orderBook, update)
 {
     if (update === null) {
         const key = getKey(orderBook)
-        const ob = map(orderBook)
+        const ob = mapToInternal(orderBook)
         exchangesOrderBooks.set(key, ob)
         return
     }
@@ -157,9 +168,9 @@ function updateOrderBook(orderBook, update)
             orderBook.bids.set(updateBidPrice, updateBidSize)
     });
 
-    orderBook.timestamp = moment.utc().toISOString()
+    orderBook.timestamp = moment.utc()
 
-    const mappedOrderBook = MapOrderBook(orderBook)
+    const mappedOrderBook = mapToPublishing(orderBook)
     publishOrderBook(mappedOrderBook)
     publishTickPrice(mappedOrderBook)
 }
@@ -168,7 +179,7 @@ function getKey(orderBook) {
     return orderBook.exchange.toLowerCase() + "_" + orderBook.marketId
 }
 
-function map(orderBook) {
+function mapToInternal(orderBook) {
     const asks = new SortedMap();
     orderBook.asks.forEach(ask => {
         const askPrice = parseFloat(ask.price)
@@ -190,13 +201,13 @@ function map(orderBook) {
     result.assetPair = orderBook.marketId
     result.asks = asks
     result.bids = bids
-    // Some exchanges don't have a timestamp as example - Poloniex, shall be investigated 
-    result.timestamp = moment.utc().toISOString()
+    // Some exchanges don't have a timestamp, as an example - Poloniex, shall be investigated
+    result.timestamp = moment.utc()
     
     return result
 }
 
-function MapOrderBook(orderBook){
+function mapToPublishing(orderBook){
     
     const exchange = exchanges.find(ex => { 
         return ex.name.toLowerCase() === orderBook.source.toLowerCase()
@@ -208,12 +219,11 @@ function MapOrderBook(orderBook){
     const suffixConfig = settings.CcxwsExchangeConnector.Main.ExchangesNamesSuffix
     const suffix = suffixConfig ? suffixConfig : "(w)"
     const source = exchange.name.replace(exchange.version, "").trim()
-    const orderBookObj = {
-        'source': source + suffix,
-        'asset': symbol.replace("/", ""),
-        'assetPair': { 'base': base, 'quote': quote },
-        'timestamp': orderBook.timestamp
-    }
+    const orderBookObj = {}
+    orderBookObj.source = source + suffix
+    orderBookObj.asset = symbol.replace("/", "")
+    orderBookObj.assetPair = { 'base': base, 'quote': quote }
+    orderBookObj.timestamp = orderBook.timestamp.toISOString()
 
     const descOrderedBidsPrices = Array.from(orderBook.bids.keys())
                                        .sort(function(a, b) { return b-a; })
@@ -261,7 +271,7 @@ function publishOrderBook(orderBook) {
 }
 
 function publishTickPrice(orderBook) {
-    const tickPrice = tickPriceFromOrderBook(orderBook)
+    const tickPrice = mapOrderBookToTickPrice(orderBook)
     if (!tickPrice) {
         return
     }
@@ -281,11 +291,11 @@ function sendToRabitMQ(rabbitExchange, object) {
             channel.publish(rabbitExchange, '', new Buffer(objectJson))
     }
     catch(e){
-        log("Error while sending a message to rabbit: " + e)
+        console.log("Error while sending a message to rabbit: " + e)
     }
 }
 
-function tickPriceFromOrderBook(orderBook) {
+function mapOrderBookToTickPrice(orderBook) {
     const tickPrice = {}
     tickPrice.source = orderBook.source
     tickPrice.asset = orderBook.asset
