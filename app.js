@@ -98,8 +98,32 @@ async function subscribeToExchangeData(exchangeName, symbols) {
         return
     }
 
-    exchange_ws.on("l2snapshot", orderBook => l2snapshotEventHandle(orderBook))
-    exchange_ws.on("l2update", update => l2updateEventHandle(update))
+    exchange_ws.on("l2snapshot", orderBook =>
+        {
+            try {
+                _sync.take(function() {
+                    l2snapshotEventHandle(orderBook)
+                    _sync.leave()
+                })
+            }
+            catch(e) {
+                console.log('Exception: ' + e)
+            }
+        }
+    )
+    exchange_ws.on("l2update", updateOrderBook =>
+        {
+            try {
+                _sync.take(function() {
+                    l2updateEventHandle(updateOrderBook)
+                    _sync.leave()
+                })
+            }
+            catch(e) {
+                console.log('Exception: ' + e)
+            }
+        }
+    )
 
     availableMarkets.forEach(market => {
         if (exchange_ws.hasLevel2Snapshots)
@@ -137,62 +161,52 @@ function getAvailableMarketsForExchange(exchange, symbols) {
 
 function l2snapshotEventHandle(orderBook)
 {
-    try {
-        const key = getKey(orderBook)
-        const internalOrderBook = mapCcxwsToInternal(orderBook)
-        
-        internalOrderBooksMap.set(key, internalOrderBook)
-        
-        const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
-        publishOrderBook(publishingOrderBook)
-        publishTickPrice(publishingOrderBook)
-    }
-    catch(e) {
-        console.log('Exception: ' + e)
-    }
+    const key = getKey(orderBook)
+    const internalOrderBook = mapCcxwsToInternal(orderBook)
+    
+    internalOrderBooksMap.set(key, internalOrderBook)
+    
+    const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
+    publishOrderBook(publishingOrderBook)
+    publishTickPrice(publishingOrderBook)
 }
 
-function l2updateEventHandle(update)
+function l2updateEventHandle(updateOrderBook)
 {
-    try {
-        const key = getKey(update);
+    const key = getKey(updateOrderBook);
 
-        let internalOrderBook = internalOrderBooksMap.get(key)
+    let internalOrderBook = internalOrderBooksMap.get(key)
 
-        if (!internalOrderBook) {
-            console.log('OrderBook ' + key + ' is not found.')
-            return
-        } 
+    if (!internalOrderBook) {
+        console.log('OrderBook ' + key + ' is not found.')
+        return
+    } 
 
-        update.asks.forEach(ask => {
-            const updateAskPrice = parseFloat(ask.price)
-            const updateAskSize = parseFloat(ask.size)
+    updateOrderBook.asks.forEach(ask => {
+        const updateAskPrice = parseFloat(ask.price)
+        const updateAskSize = parseFloat(ask.size)
 
-            internalOrderBook.asks.del(updateAskPrice)
-            
-            if (updateAskSize !== 0)
-                internalOrderBook.asks.set(updateAskPrice, updateAskSize)
-        });
+        internalOrderBook.asks.del(updateAskPrice)
+        
+        if (updateAskSize !== 0)
+            internalOrderBook.asks.set(updateAskPrice, updateAskSize)
+    });
 
-        update.bids.forEach(bid => {
-            const updateBidPrice = parseFloat(bid.price)
-            const updateBidSize = parseFloat(bid.size)
+    updateOrderBook.bids.forEach(bid => {
+        const updateBidPrice = parseFloat(bid.price)
+        const updateBidSize = parseFloat(bid.size)
 
-            internalOrderBook.bids.del(updateBidPrice)
+        internalOrderBook.bids.del(updateBidPrice)
 
-            if (updateBidSize !== 0)
-                internalOrderBook.bids.set(updateBidPrice, updateBidSize)
-        });
+        if (updateBidSize !== 0)
+            internalOrderBook.bids.set(updateBidPrice, updateBidSize)
+    });
 
-        internalOrderBook.timestamp = moment.utc()
+    internalOrderBook.timestamp = moment.utc()
 
-        const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
-        publishOrderBook(publishingOrderBook)
-        publishTickPrice(publishingOrderBook)
-    }
-    catch(e) {
-        console.log('Exception: ' + e)
-    }
+    const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
+    publishOrderBook(publishingOrderBook)
+    publishTickPrice(publishingOrderBook)
 }
 
 function getKey(ccxwsOrderBook) {
