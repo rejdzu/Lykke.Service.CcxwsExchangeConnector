@@ -20,6 +20,9 @@ CcxwsExchangeConnector:
         ExchangesNamesSuffix:
             settings-key: CcxwsExchangeConnector-ExchangesNamesSuffix
 
+        ReconnectIntervalMs:
+            settings-key: CcxwsExchangeConnector-ReconnectIntervalMs
+
         Verbose:
             settings-key: CcxwsExchangeConnector-Verbose
 

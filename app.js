@@ -2,12 +2,13 @@ const ccxws = require("ccxws");
 const ccxt = require('ccxt');
 const express = require('express')
 const moment = require('moment');
+const sortedMap = require("sorted-map");
+const semaphore = require("semaphore");
 const getRabbitMqChannel = require('./RabbitMq/rabbitMq')
 const getSettings = require('./Settings/settings')
 const mapping = require('./Utils/symbolMapping')
 const exchangesMapping = require('./Utils/exchangesMapping')
 const packageJson = require('./package.json')
-const SortedMap = require("sorted-map");
 
 process.on('uncaughtException',  e => { console.log(e) /*process.exit(1)*/ })
 process.on('unhandledRejection', e => { console.log(e) /*process.exit(1)*/ })
@@ -16,13 +17,14 @@ let settings
 let channel
 
 const exchanges = [];
-const internalOrderBooksMap = new SortedMap();
+const _sync = semaphore(1);
+const internalOrderBooksMap = new sortedMap();
 
 // There are 4 form of order books:
 // 1. CCXWS
 // 2. CCXT
 // 3. Internal (optimized for quick update - with sorted map for asks and bids, stored in the 'internalOrderBooksMap' variable)
-// 4. Publishing to queue common format
+// 4. Publishing to queue common contract format
 
 (async function main() {
     settings = await getSettings()
@@ -75,10 +77,11 @@ async function subscribeToExchangesData() {
     ))
 }
 
-async function subscribeToExchangeData(exchangeName, symbols){
+async function subscribeToExchangeData(exchangeName, symbols) {
 
     const exchange = new ccxt[exchangeName]()
     const exchange_ws = exchangesMapping.MapExchangeCcxtToCcxws(exchangeName)
+    exchange_ws.reconnectIntervalMs = settings.CcxwsExchangeConnector.Main.ReconnectIntervalMs
 
     try{
         exchange.timeout = 30 * 1000
@@ -99,7 +102,10 @@ async function subscribeToExchangeData(exchangeName, symbols){
     exchange_ws.on("l2update", update => l2updateEventHandle(update))
 
     availableMarkets.forEach(market => {
-        exchange_ws.subscribeLevel2Updates(market)
+        if (exchange_ws.hasLevel2Snapshots)
+            exchange_ws.subscribeLevel2Snapshots(market)
+        else
+            exchange_ws.subscribeLevel2Updates(market)
     });
 }
 
@@ -129,53 +135,64 @@ function getAvailableMarketsForExchange(exchange, symbols) {
     return result
 }
 
-
 function l2snapshotEventHandle(orderBook)
 {
-    const key = getKey(orderBook)
-    const internalOrderBook = mapCcxwsToInternal(orderBook)
-    internalOrderBooksMap.set(key, internalOrderBook)
-
-    const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
-    publishOrderBook(publishingOrderBook)
-    publishTickPrice(publishingOrderBook)
+    try {
+        const key = getKey(orderBook)
+        const internalOrderBook = mapCcxwsToInternal(orderBook)
+        
+        internalOrderBooksMap.set(key, internalOrderBook)
+        
+        const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
+        publishOrderBook(publishingOrderBook)
+        publishTickPrice(publishingOrderBook)
+    }
+    catch(e) {
+        console.log('Exception: ' + e)
+    }
 }
 
 function l2updateEventHandle(update)
 {
-    const key = getKey(update);
-    const internalOrderBook = internalOrderBooksMap.get(key)
+    try {
+        const key = getKey(update);
 
-    if (!internalOrderBook) {
-        console.log('OrderBook ' + key + ' is not found.')
-        return
-    } 
+        let internalOrderBook = internalOrderBooksMap.get(key)
 
-    update.asks.forEach(ask => {
-        const updateAskPrice = parseFloat(ask.price)
-        const updateAskSize = parseFloat(ask.size)
+        if (!internalOrderBook) {
+            console.log('OrderBook ' + key + ' is not found.')
+            return
+        } 
 
-        internalOrderBook.asks.del(updateAskPrice)
+        update.asks.forEach(ask => {
+            const updateAskPrice = parseFloat(ask.price)
+            const updateAskSize = parseFloat(ask.size)
 
-        if (updateAskSize !== 0)
-            internalOrderBook.asks.set(updateAskPrice, updateAskSize)
-    });
+            internalOrderBook.asks.del(updateAskPrice)
+            
+            if (updateAskSize !== 0)
+                internalOrderBook.asks.set(updateAskPrice, updateAskSize)
+        });
 
-    update.bids.forEach(bid => {
-        const updateBidPrice = parseFloat(bid.price)
-        const updateBidSize = parseFloat(bid.size)
+        update.bids.forEach(bid => {
+            const updateBidPrice = parseFloat(bid.price)
+            const updateBidSize = parseFloat(bid.size)
 
-        internalOrderBook.bids.del(updateBidPrice)
+            internalOrderBook.bids.del(updateBidPrice)
 
-        if (updateBidSize !== 0)
-            internalOrderBook.bids.set(updateBidPrice, updateBidSize)
-    });
+            if (updateBidSize !== 0)
+                internalOrderBook.bids.set(updateBidPrice, updateBidSize)
+        });
 
-    internalOrderBook.timestamp = moment.utc()
+        internalOrderBook.timestamp = moment.utc()
 
-    const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
-    publishOrderBook(publishingOrderBook)
-    publishTickPrice(publishingOrderBook)
+        const publishingOrderBook = mapInternalToPublishing(internalOrderBook)
+        publishOrderBook(publishingOrderBook)
+        publishTickPrice(publishingOrderBook)
+    }
+    catch(e) {
+        console.log('Exception: ' + e)
+    }
 }
 
 function getKey(ccxwsOrderBook) {
@@ -183,7 +200,7 @@ function getKey(ccxwsOrderBook) {
 }
 
 function mapCcxwsToInternal(ccxwsOrderBook) {
-    const asks = new SortedMap();
+    const asks = new sortedMap();
     ccxwsOrderBook.asks.forEach(ask => {
         const askPrice = parseFloat(ask.price)
         const askSize = parseFloat(ask.size)
@@ -191,7 +208,7 @@ function mapCcxwsToInternal(ccxwsOrderBook) {
         asks.set(askPrice, askSize)
     })
 
-    const bids = new SortedMap();
+    const bids = new sortedMap();
     ccxwsOrderBook.bids.forEach(bid => {
         const bidPrice = parseFloat(bid.price)
         const bidSize = parseFloat(bid.size)
