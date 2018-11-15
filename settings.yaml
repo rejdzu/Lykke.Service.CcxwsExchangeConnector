@@ -23,8 +23,11 @@ CcxwsExchangeConnector:
         ReconnectIntervalMs:
             settings-key: CcxwsExchangeConnector-ReconnectIntervalMs
 
-        Verbose:
-            settings-key: CcxwsExchangeConnector-Verbose
+        PublishingIntervalMs:
+            settings-key: CcxwsExchangeConnector-PublishingIntervalMs
+
+        LoggingLevel:
+            settings-key: CcxwsExchangeConnector-LoggingLevel
 
 
     RabbitMq:

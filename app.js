@@ -1,32 +1,28 @@
 const ccxws = require("ccxws");
 const ccxt = require('ccxt');
 const express = require('express')
-const winston = require('winston')
-const getRabbitMqChannel = require('./RabbitMq/rabbitMq')
-const getSettings = require('./Settings/settings')
-const assetPairsMapping = require('./Utils/assetPairsMapping')
-const exchangesMapping = require('./Utils/exchangesMapping')
+const path = require('path');
+const LogFactory =  require('./utils/logFactory')
+const RabbitMq = require('./rabbitMq/rabbitMq')
+const getSettings = require('./settings/settings')
+const assetPairsMapping = require('./utils/assetPairsMapping')
+const exchangesMapping = require('./utils/exchangesMapping')
 const packageJson = require('./package.json')
 const exchangeEventsHandler = require('./exchangeEventsHandler')
 
-process.on('uncaughtException',  e => { winston.warn(e) /*process.exit(1)*/ })
-process.on('unhandledRejection', e => { winston.warn(e) /*process.exit(1)*/ })
-
 let settings
-let channel
+let log
+let rabbitMq
 
-(async function main() {
-    winston.add(new winston.transports.Console({
-        level: 'debug',
-        handleExceptions: true,
-        format: winston.format.simple(),
-        colorize: true,
-      }));
+(async function main() {    
+    settings = (await getSettings()).CcxwsExchangeConnector
+    log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel)
 
-    winston.info('Starting...')
+    process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
+    process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
-    settings = await getSettings()
-    channel = await getRabbitMqChannel(settings)
+    rabbitMq = new RabbitMq(settings.RabbitMq, settings.Main.LoggingLevel)
+    await rabbitMq.getChannel()
 
     subscribeToExchangesData()
 
@@ -34,8 +30,8 @@ let channel
 })();
 
 async function subscribeToExchangesData() {
-    const exchanges = settings.CcxwsExchangeConnector.Main.Exchanges
-    const symbols = settings.CcxwsExchangeConnector.Main.Symbols
+    const exchanges = settings.Main.Exchanges
+    const symbols = settings.Main.Symbols
 
     await Promise.all(exchanges.map (exchangeName =>
         subscribeToExchangeData(exchangeName, symbols)
@@ -46,58 +42,32 @@ async function subscribeToExchangeData(exchangeName, symbols) {
 
     const exchange = new ccxt[exchangeName]()
     const exchange_ws = exchangesMapping.MapExchangeCcxtToCcxws(exchangeName)
-    exchange_ws.reconnectIntervalMs = settings.CcxwsExchangeConnector.Main.ReconnectIntervalMs
+    exchange_ws.reconnectIntervalMs = settings.Main.ReconnectIntervalMs
 
     try {
         exchange.timeout = 30 * 1000
         await exchange.loadMarkets()
     } catch (e) {
-        console.log(exchange.id + " can't load markets: " + e)
+        log.warn(`${exchange.id} can't load markets: ${e}`)
         return
     }
 
     const availableMarkets = getAvailableMarketsForExchange(exchange, symbols)
     if (availableMarkets.length === 0) {
-        console.log(exchange.id + " doesn't have any symbols from config.")
+        log.warn(`${exchange.id} doesn't have any symbols from config.`)
         return
     }
 
-    const handler = new exchangeEventsHandler(exchange, settings, channel)
+    const handler = new exchangeEventsHandler(exchange, settings, rabbitMq)
 
-    exchange_ws.on("l2snapshot", orderBook =>
-        //{
-        //     try {
-        //         _sync.take(function() {
-                    handler.l2snapshotEventHandle(orderBook)
-        //             _sync.leave()
-        //         })
-        //     }
-        //     catch(e) {
-        //         console.log('Exception: ' + e)
-        //     }
-        //}
-    )
-    exchange_ws.on("l2update", updateOrderBook =>
-        // {
-        //     try {
-        //         _sync.take(function() {
-                    handler.l2updateEventHandle(updateOrderBook)
-        //             _sync.leave()
-        //         })
-        //     }
-        //     catch(e) {
-        //         console.log('Exception: ' + e)
-        //     }
-        // }
-    )
+    exchange_ws.on("l2snapshot", async orderBook => await handler.l2snapshotEventHandle(orderBook))
+    exchange_ws.on("l2update", async updateOrderBook => await handler.l2updateEventHandle(updateOrderBook))
 
     availableMarkets.forEach(market => {
         if (exchange_ws.hasLevel2Snapshots){
             exchange_ws.subscribeLevel2Snapshots(market)
-            console.log('Subscribed to snapshot ' + exchange.name + ' ' + market.symbol)
         } else {
             exchange_ws.subscribeLevel2Updates(market)
-            console.log('Subscribed to update ' + exchange.name + ' ' + market.symbol)
         }
     });
 }
@@ -139,12 +109,12 @@ function startWebServer() {
       
     const app = express()
 
-    app.get('/api/IsAlive', function (req, res) {
+    app.get('/api/isAlive', function (req, res) {
         res.header("Content-Type",'application/json')
         res.send(JSON.stringify(response, null, 4))
     })
     
-    app.get('/settings', async function (req, res) {
+    app.get('/api/settings', async function (req, res) {
         res.header("Content-Type",'application/json')
         res.send(JSON.stringify(settings, null, 4))
     })
@@ -155,6 +125,6 @@ function startWebServer() {
 
        if (host === "::") { 
            host = "localhost" }
-       console.log("Listening at http://%s:%s", host, port)
+        log.info(`Listening at http://${host}:${port}`)
     })
 }

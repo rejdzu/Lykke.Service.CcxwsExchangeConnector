@@ -4,7 +4,7 @@ function MapAssetPairForward(assetPair, settings){
     var base = assetPair.split("/")[0]
     var quote = assetPair.split("/")[1]
 
-    var assetsMapping = settings.CcxwsExchangeConnector.Main.AssetsMapping
+    var assetsMapping = settings.Main.AssetsMapping
     for (const element of assetsMapping) {
         if (base == element.value){
             result = element.key + "/" + quote
@@ -25,7 +25,7 @@ function MapAssetPairBackward(assetPair, settings){
     var base = assetPair.split("/")[0]
     var quote = assetPair.split("/")[1]
 
-    var assetsMapping = settings.CcxwsExchangeConnector.Main.AssetsMapping
+    var assetsMapping = settings.Main.AssetsMapping
     for (const element of assetsMapping) {
         if (base == element.key){
             result = element.value + "/" + quote

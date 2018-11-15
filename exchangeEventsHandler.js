@@ -1,47 +1,44 @@
 const moment = require('moment');
 const sortedMap = require("sorted-map");
-const mapping = require('./Utils/assetPairsMapping')
+const path = require('path');
+const LogFactory =  require('./utils/logFactory')
+const mapping = require('./utils/assetPairsMapping')
 
 class ExchangeEventsHandler {
     
-    constructor(exchange, settings, channel) {
+    constructor(exchange, settings, rabbitMq) {
         this._exchange = exchange
         this._settings = settings
-        this._channel = channel
+        this._rabbitMq = rabbitMq
         this._orderBooks = new sortedMap()
         this._lastTimePublished = new sortedMap()
+        this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel)
     }
 
-    l2snapshotEventHandle(orderBook) {
-        //console.log('snapshot', moment().toISOString(), orderBook.exchange)
-        //return
-
-        const key = this._getKey(orderBook)
+    async l2snapshotEventHandle(orderBook) {
+        const key = orderBook.marketId
         const internalOrderBook = this._mapCcxwsToInternal(orderBook)
         
         this._orderBooks.set(key, internalOrderBook)
 
         const lastTimePublished = this._lastTimePublished.get(key)
-        if (!lastTimePublished || moment() - lastTimePublished > this._settings.CcxwsExchangeConnector.Main.PublishingIntervalMs)
+        if (!lastTimePublished || moment() - lastTimePublished > this._settings.Main.PublishingIntervalMs)
         {
             const publishingOrderBook = this._mapInternalToPublishing(internalOrderBook)
-            this._publishOrderBook(publishingOrderBook)
-            this._publishTickPrice(publishingOrderBook)
+            await this._publishOrderBook(publishingOrderBook)
+            await this._publishTickPrice(publishingOrderBook)
 
             this._lastTimePublished.set(key, moment.utc())
         }
     }
 
-    l2updateEventHandle(updateOrderBook) {
-        //console.log('update', moment().toISOString(), updateOrderBook.exchange)
-        //return
-
-        const key = this._getKey(updateOrderBook);
+    async l2updateEventHandle(updateOrderBook) {
+        const key = updateOrderBook.marketId
 
         const internalOrderBook = this._orderBooks.get(key)
 
         if (!internalOrderBook) {
-            console.log('Internal order book ' + this._exchange.name + ' ' + key + ' is not found during update.')
+            this._log.info(`Internal order book ${this._exchange.name} ${key} is not found during update.`)
             return
         }
 
@@ -71,15 +68,11 @@ class ExchangeEventsHandler {
         if (!lastTimePublished || moment() - lastTimePublished > 1000)
         {
             const publishingOrderBook = this._mapInternalToPublishing(internalOrderBook)
-            this._publishOrderBook(publishingOrderBook)
-            this._publishTickPrice(publishingOrderBook)
+            await this._publishOrderBook(publishingOrderBook)
+            await this._publishTickPrice(publishingOrderBook)
 
             this._lastTimePublished.set(key, moment.utc())
         }
-    }
-
-    _getKey(ccxwsOrderBook) {
-        return ccxwsOrderBook.marketId
     }
 
     _mapCcxwsToInternal(ccxwsOrderBook) {
@@ -116,7 +109,7 @@ class ExchangeEventsHandler {
     
         const base = symbol.substring(0, symbol.indexOf('/'))
         const quote = symbol.substring(symbol.indexOf("/") + 1)
-        const suffixConfig = this._settings.CcxwsExchangeConnector.Main.ExchangesNamesSuffix
+        const suffixConfig = this._settings.Main.ExchangesNamesSuffix
         const suffix = suffixConfig ? suffixConfig : "(w)"
         const source = this._exchange.name.replace(this._exchange.version, "").trim()
         const publishingOrderBook = {}
@@ -162,35 +155,22 @@ class ExchangeEventsHandler {
         return publishingOrderBook
     }
 
-    _publishOrderBook(orderBook) {
+    async _publishOrderBook(orderBook) {
         
-        this._sendToRabitMQ(this._settings.CcxwsExchangeConnector.RabbitMq.OrderBooks, orderBook)
+        await this._rabbitMq.send(this._settings.RabbitMq.OrderBooks, orderBook)
     
-        this._log("OB: %s %s %s, bids[0]: %s, asks[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), orderBook.source, orderBook.asset, orderBook.bids[0].price, orderBook.asks[0].price)
+        this._log.debug(`OB: ${orderBook.source} ${orderBook.asset}, bids:${orderBook.bids.length}, asks:${orderBook.asks.length}, best bid:${orderBook.bids[0].price}, best ask:${orderBook.asks[0].price}.`)
     }
     
-    _publishTickPrice(orderBook) {
+    async _publishTickPrice(orderBook) {
         const tickPrice = this._mapOrderBookToTickPrice(orderBook)
         if (!tickPrice) {
             return
         }
     
-        this._sendToRabitMQ(this._settings.CcxwsExchangeConnector.RabbitMq.TickPrices, tickPrice)
-    
-        this._log("TP: %s %s %s, bids[0]: %s, asks[0]: %s", moment().format("DD.MM.YYYY hh:mm:ss"), tickPrice.source, tickPrice.asset, tickPrice.bid, tickPrice.ask)
-    }
-    
-    _sendToRabitMQ(rabbitExchange, object) {
-        //TODO: check if it is changed, if not - don't publish (settings in config)
-        const objectJson = JSON.stringify(object)
-    
-        try{
-            if (this._channel)
-                this._channel.publish(rabbitExchange, '', new Buffer(objectJson))
-        }
-        catch(e){
-            console.log("Error while sending a message to rabbit: " + e)
-        }
+        await this._rabbitMq.send(this._settings.RabbitMq.TickPrices, tickPrice)
+
+        this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid: ${tickPrice.bid}, ask:${tickPrice.ask}.`)
     }
     
     _mapOrderBookToTickPrice(publishingOrderBook) {
@@ -217,12 +197,6 @@ class ExchangeEventsHandler {
         }
     
         return tickPrice
-    }
-    
-    _log(...args) {
-        if (this._settings.CcxwsExchangeConnector.Main.Verbose) {
-            console.log.apply(this, args)
-        }
     }
     
     _toFixed(number) {
