@@ -18,7 +18,6 @@ class ExchangeEventsHandler {
     async l2snapshotEventHandle(orderBook) {
         const key = orderBook.marketId
         const internalOrderBook = this._mapCcxwsToInternal(orderBook)
-        
         this._orderBooks.set(key, internalOrderBook)
 
         const lastTimePublished = this._lastTimePublished.get(key)
@@ -104,7 +103,6 @@ class ExchangeEventsHandler {
     }
     
     _mapInternalToPublishing(internalOrderBook) {
-        
         const symbol = mapping.MapAssetPairBackward(internalOrderBook.assetPair, this._settings)
     
         const base = symbol.substring(0, symbol.indexOf('/'))
@@ -156,7 +154,6 @@ class ExchangeEventsHandler {
     }
 
     async _publishOrderBook(orderBook) {
-        
         await this._rabbitMq.send(this._settings.RabbitMq.OrderBooks, orderBook)
     
         this._log.debug(`OB: ${orderBook.source} ${orderBook.asset}, bids:${orderBook.bids.length}, asks:${orderBook.asks.length}, best bid:${orderBook.bids[0].price}, best ask:${orderBook.asks[0].price}.`)
@@ -180,21 +177,19 @@ class ExchangeEventsHandler {
         tickPrice.timestamp = publishingOrderBook.timestamp
         const bestBid = publishingOrderBook.bids.length ? publishingOrderBook.bids[0] : undefined
         const bestAsk = publishingOrderBook.asks.length ? publishingOrderBook.asks[0] : undefined
-        if (!bestBid || !bestAsk) {
+        
+        if (!bestBid || !bestAsk)
             return null
-        }
-        if (bestBid && bestBid.price) {
+
+        if (bestBid && bestBid.price)
             tickPrice.bid = bestBid.price
-        }
-        else {
+        else
             tickPrice.bid = null
-        }
-        if (bestAsk && bestAsk.price) {
+
+        if (bestAsk && bestAsk.price)
             tickPrice.ask = bestAsk.price
-        }
-        else {
+        else
             tickPrice.ask = null
-        }
     
         return tickPrice
     }
