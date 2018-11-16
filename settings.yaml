@@ -1,0 +1,56 @@
+CcxwsExchangeConnector:
+
+    Main:
+
+        Exchanges:
+            settings-key: CcxwsExchangeConnector-Exchanges
+            types:
+              - JsonArray
+
+        Symbols:
+            settings-key: CcxwsExchangeConnector-Symbols
+            types:
+              - JsonArray            
+
+        AssetsMapping:
+            settings-key: CcxwsExchangeConnector-AssetsMapping
+            types:
+              - JsonArray  
+
+        ExchangesNamesSuffix:
+            settings-key: CcxwsExchangeConnector-ExchangesNamesSuffix
+
+        ReconnectIntervalMs:
+            settings-key: CcxwsExchangeConnector-ReconnectIntervalMs
+
+        PublishingIntervalMs:
+            settings-key: CcxwsExchangeConnector-PublishingIntervalMs
+
+        LoggingLevel:
+            settings-key: CcxwsExchangeConnector-LoggingLevel
+
+
+    RabbitMq:
+        ConnectionString:
+            settings-key: RawPriceRabbitMq
+            types:
+              - AzureTableStorage
+        OrderBooks:
+            settings-key: CryptoIndexService-OrderBooks
+        TickPrices:
+            settings-key: CryptoIndexService-TickPrices
+
+
+SlackNotifications:
+    AzureQueue:
+        ConnectionString:
+            settings-key: SlackNotificationsConnString
+            types:
+                - AzureTableStorage
+        QueueName:
+            settings-key: SlackQueueName
+
+MonitoringServiceClient:
+    MonitoringServiceUrl:
+        settings-key: MonitoringServiceUrl
+
