@@ -8,9 +8,11 @@ const assetPairsMapping = require('./utils/assetPairsMapping')
 const exchangesMapping = require('./utils/exchangesMapping')
 const packageJson = require('./package.json')
 const exchangeEventsHandler = require('./exchangeEventsHandler')
+const net = require('net');
 
 let settings
 let log
+let sanitizerSocket
 
 (async function main() {    
     settings = (await getSettings()).CcxwsExchangeConnector
@@ -19,10 +21,17 @@ let log
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
+    createSocketToSanitizer()
+
     subscribeToExchangesData()
 
     startWebServer()
 })();
+
+async function createSocketToSanitizer() {
+    sanitizerSocket = new net.Socket();
+    sanitizerSocket.connect(settings.Sanitizer.Port, settings.Sanitizer.Host, () => log.info('Sanitizer connected on: ' + settings.Sanitizer.Port + ':' + settings.Sanitizer.Host));
+}
 
 async function subscribeToExchangesData() {
     const exchanges = settings.Main.Exchanges
@@ -53,10 +62,11 @@ async function subscribeToExchangeData(exchangeName, symbols) {
         return
     }
 
-    const handler = new exchangeEventsHandler(exchange, settings)
+    const handler = new exchangeEventsHandler(exchange, sanitizerSocket, settings)
 
     exchange_ws.on("l2snapshot", async orderBook => await handler.l2snapshotEventHandle(orderBook))
     exchange_ws.on("l2update", async updateOrderBook => await handler.l2updateEventHandle(updateOrderBook))
+    exchange_ws.on("trade", async trade => await handler.tradeEventHandler(trade))
 
     availableMarkets.forEach(market => {
         if (exchange_ws.hasLevel2Snapshots){
@@ -64,6 +74,8 @@ async function subscribeToExchangeData(exchangeName, symbols) {
         } else {
             exchange_ws.subscribeLevel2Updates(market)
         }
+
+        exchange_ws.subscribeTrades(market)
     });
 }
 

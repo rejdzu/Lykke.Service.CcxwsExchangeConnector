@@ -7,6 +7,10 @@
       "LoggingLevel": "debug",
       "PublishingIntervalMs": 500,
       "AssetsMapping": []
+    },
+    "Sanitizer":{
+      "Host": "127.0.0.1",
+      "Port": 1234
     }
   }
 }

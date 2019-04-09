@@ -6,8 +6,9 @@ const mapping = require('./utils/assetPairsMapping')
 
 class ExchangeEventsHandler {
     
-    constructor(exchange, settings) {
+    constructor(exchange, sanitizerSocket, settings) {
         this._exchange = exchange
+        this._sanitizerSocket = sanitizerSocket
         this._settings = settings
         this._orderBooks = new sortedMap()
         this._lastTimePublished = new sortedMap()
@@ -71,6 +72,10 @@ class ExchangeEventsHandler {
 
             this._lastTimePublished.set(key, moment.utc())
         }
+    }
+
+    async tradeEventHandler(trade) {
+        await this._publishTrade(trade)
     }
 
     _mapCcxwsToInternal(ccxwsOrderBook) {
@@ -162,7 +167,14 @@ class ExchangeEventsHandler {
             return
         }
     
-        this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid: ${tickPrice.bid}, ask:${tickPrice.ask}.`)
+        this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
+
+        this._sanitizerSocket.write(JSON.stringify(tickPrice))
+    }
+
+    async _publishTrade(trade) {
+        this._log.debug(`TR: ${trade.marketId} price:${trade.price}, side:${trade.side}, amount:${trade.amount}.`)
+        this._sanitizerSocket.write(JSON.stringify(trade))
     }
     
     _mapOrderBookToTickPrice(publishingOrderBook) {
