@@ -24,6 +24,8 @@ function MapExchangeCcxtToCcxws(ccxtExchangeName){
             return new ccxws.HitBTC()
         case 'huobi':
             return new ccxws.Huobi()
+        case 'kraken':
+            return new ccxws.Kraken()
         case 'okex':
             return new ccxws.OKEx()
         case 'poloniex':

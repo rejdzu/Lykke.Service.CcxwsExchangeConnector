@@ -3,7 +3,6 @@ const ccxt = require('ccxt');
 const express = require('express')
 const path = require('path');
 const LogFactory =  require('./utils/logFactory')
-const RabbitMq = require('./rabbitMq/rabbitMq')
 const getSettings = require('./settings/settings')
 const assetPairsMapping = require('./utils/assetPairsMapping')
 const exchangesMapping = require('./utils/exchangesMapping')
@@ -12,7 +11,6 @@ const exchangeEventsHandler = require('./exchangeEventsHandler')
 
 let settings
 let log
-let rabbitMq
 
 (async function main() {    
     settings = (await getSettings()).CcxwsExchangeConnector
@@ -20,9 +18,6 @@ let rabbitMq
 
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
-
-    rabbitMq = new RabbitMq(settings.RabbitMq, settings.Main.LoggingLevel)
-    await rabbitMq.getChannel()
 
     subscribeToExchangesData()
 
@@ -58,7 +53,7 @@ async function subscribeToExchangeData(exchangeName, symbols) {
         return
     }
 
-    const handler = new exchangeEventsHandler(exchange, settings, rabbitMq)
+    const handler = new exchangeEventsHandler(exchange, settings)
 
     exchange_ws.on("l2snapshot", async orderBook => await handler.l2snapshotEventHandle(orderBook))
     exchange_ws.on("l2update", async updateOrderBook => await handler.l2updateEventHandle(updateOrderBook))

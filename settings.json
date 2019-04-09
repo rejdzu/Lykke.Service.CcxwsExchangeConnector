@@ -1,0 +1,12 @@
+{
+  "CcxwsExchangeConnector": {
+    "Main": {
+      "Exchanges": ["kraken", "bitstamp"],
+      "Symbols": ["BTC/USD"],
+      "ReconnectIntervalsMs": 5000,
+      "LoggingLevel": "debug",
+      "PublishingIntervalMs": 500,
+      "AssetsMapping": []
+    }
+  }
+}

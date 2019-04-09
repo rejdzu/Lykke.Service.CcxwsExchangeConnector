@@ -6,7 +6,7 @@
   "dependencies": {
     "amqplib": "^0.5.2",
     "ccxt": "^1.17.477",
-    "ccxws": "^0.16.3",
+    "ccxws": "^0.22.0",
     "express": "^4.16.4",
     "fs": "0.0.1-security",
     "moment": "^2.22.2",

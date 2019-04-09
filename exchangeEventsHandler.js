@@ -6,10 +6,9 @@ const mapping = require('./utils/assetPairsMapping')
 
 class ExchangeEventsHandler {
     
-    constructor(exchange, settings, rabbitMq) {
+    constructor(exchange, settings) {
         this._exchange = exchange
         this._settings = settings
-        this._rabbitMq = rabbitMq
         this._orderBooks = new sortedMap()
         this._lastTimePublished = new sortedMap()
         this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel)
@@ -154,8 +153,6 @@ class ExchangeEventsHandler {
     }
 
     async _publishOrderBook(orderBook) {
-        await this._rabbitMq.send(this._settings.RabbitMq.OrderBooks, orderBook)
-    
         this._log.debug(`OB: ${orderBook.source} ${orderBook.asset}, bids:${orderBook.bids.length}, asks:${orderBook.asks.length}, best bid:${orderBook.bids[0].price}, best ask:${orderBook.asks[0].price}.`)
     }
     
@@ -165,8 +162,6 @@ class ExchangeEventsHandler {
             return
         }
     
-        await this._rabbitMq.send(this._settings.RabbitMq.TickPrices, tickPrice)
-
         this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid: ${tickPrice.bid}, ask:${tickPrice.ask}.`)
     }
     
