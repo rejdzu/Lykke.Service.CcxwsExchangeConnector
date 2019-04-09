@@ -5,6 +5,7 @@
   "main": "app.js",
   "dependencies": {
     "amqplib": "^0.5.2",
+    "azure-storage": "^2.10.2",
     "ccxt": "^1.17.477",
     "ccxws": "^0.22.0",
     "express": "^4.16.4",

@@ -8,9 +8,12 @@
       "PublishingIntervalMs": 500,
       "AssetsMapping": []
     },
-    "Sanitizer":{
+    "Sanitizer": {
       "Host": "127.0.0.1",
       "Port": 1234
+    },
+    "Storage": {
+      "TableName": "marketData"
     }
   }
 }

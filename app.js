@@ -9,10 +9,12 @@ const exchangesMapping = require('./utils/exchangesMapping')
 const packageJson = require('./package.json')
 const exchangeEventsHandler = require('./exchangeEventsHandler')
 const net = require('net');
+const azure = require('azure-storage');
 
 let settings
 let log
 let sanitizerSocket
+let tableService
 
 (async function main() {    
     settings = (await getSettings()).CcxwsExchangeConnector
@@ -21,12 +23,28 @@ let sanitizerSocket
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
+    createTableService()
+
     createSocketToSanitizer()
 
     subscribeToExchangesData()
 
     startWebServer()
 })();
+
+async function createTableService() {
+    const connectionString = azure.generateDevelopmentStorageCredentials()
+    tableService = azure.createTableService(connectionString);
+    tableService.createTableIfNotExists(settings.Storage.TableName, function(error, result, response) {
+      if (!error) {
+        // result contains true if created; false if already exists
+        log.debug(`Azure result: ${result}, response:${response}.`)
+      } 
+      else {
+        log.warn(`Azure: ${error}, result: ${result}, response:${response}.`)
+      }
+    });
+}
 
 async function createSocketToSanitizer() {
     sanitizerSocket = new net.Socket();
@@ -62,7 +80,7 @@ async function subscribeToExchangeData(exchangeName, symbols) {
         return
     }
 
-    const handler = new exchangeEventsHandler(exchange, sanitizerSocket, settings)
+    const handler = new exchangeEventsHandler(exchange, sanitizerSocket, tableService, settings)
 
     exchange_ws.on("l2snapshot", async orderBook => await handler.l2snapshotEventHandle(orderBook))
     exchange_ws.on("l2update", async updateOrderBook => await handler.l2updateEventHandle(updateOrderBook))

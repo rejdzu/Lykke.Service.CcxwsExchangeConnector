@@ -3,13 +3,19 @@ const sortedMap = require("sorted-map");
 const path = require('path');
 const LogFactory =  require('./utils/logFactory')
 const mapping = require('./utils/assetPairsMapping')
+const azure = require('azure-storage');
 
 class ExchangeEventsHandler {
     
-    constructor(exchange, sanitizerSocket, settings) {
+    constructor(exchange, sanitizerSocket, tableService, settings) {
         this._exchange = exchange
         this._sanitizerSocket = sanitizerSocket
+        this._tableService = tableService
         this._settings = settings
+        this._lastBidAsk = {
+            bid: 0,
+            ask: 0
+        }
         this._orderBooks = new sortedMap()
         this._lastTimePublished = new sortedMap()
         this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel)
@@ -158,7 +164,7 @@ class ExchangeEventsHandler {
     }
 
     async _publishOrderBook(orderBook) {
-        this._log.debug(`OB: ${orderBook.source} ${orderBook.asset}, bids:${orderBook.bids.length}, asks:${orderBook.asks.length}, best bid:${orderBook.bids[0].price}, best ask:${orderBook.asks[0].price}.`)
+        //this._log.debug(`OB: ${orderBook.source} ${orderBook.asset}, bids:${orderBook.bids.length}, asks:${orderBook.asks.length}, best bid:${orderBook.bids[0].price}, best ask:${orderBook.asks[0].price}.`)
     }
     
     async _publishTickPrice(orderBook) {
@@ -167,16 +173,42 @@ class ExchangeEventsHandler {
             return
         }
     
-        this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
+        if(tickPrice.bid != this._lastBidAsk.bid || tickPrice.ask != this._lastBidAsk.ask) {
+            this._lastBidAsk = { 
+                bid: tickPrice.bid, 
+                ask: tickPrice.ask 
+            }
 
-        this._sanitizerSocket.write(JSON.stringify(tickPrice))
+            this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
+
+            this._storeInTableService(tickPrice)
+            this._sanitizerSocket.write(JSON.stringify(tickPrice))
+
+        }
     }
 
     async _publishTrade(trade) {
-        this._log.debug(`TR: ${trade.marketId} price:${trade.price}, side:${trade.side}, amount:${trade.amount}.`)
+        //this._log.debug(`TR: ${trade.marketId} price:${trade.price}, side:${trade.side}, amount:${trade.amount}.`)
         this._sanitizerSocket.write(JSON.stringify(trade))
     }
     
+    _storeInTableService(data) {
+        var entGen = azure.TableUtilities.entityGenerator;
+        var entity = {
+            PartitionKey: entGen.String(data.asset),
+            RowKey: entGen.String(data.source + "_" + data.timestamp),
+            OriginalTimestamp: entGen.DateTime(data.timestamp),
+            Bid: entGen.String(data.bid),
+            Ask: entGen.String(data.ask)
+        };
+        var that = this
+        this._tableService.insertEntity(this._settings.Storage.TableName, entity, function(error, result, response) {
+            if (!error) {
+                // result contains the ETag for the new entity
+            }
+        });
+    }
+
     _mapOrderBookToTickPrice(publishingOrderBook) {
         const tickPrice = {}
         tickPrice.source = publishingOrderBook.source
