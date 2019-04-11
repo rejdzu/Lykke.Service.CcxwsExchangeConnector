@@ -1,10 +1,10 @@
 {
   "CcxwsExchangeConnector": {
     "Main": {
-      "Exchanges": ["kraken", "bitstamp"],
-      "Symbols": ["BTC/USD"],
+      "Exchanges": ["kraken", "bitstamp", "binance", "poloniex", "bitflyer", "bittrex", "coinex", "coinbasepro"],
+      "Symbols": ["BTC/USD", "BTC/EUR", "BTC/CHF", "ETH/USD", "ETH/EUR", "ETH/CHF", "LTC/USD", "LTC/EUR", "LTC/CHF", "XRP/USD", "XRP/EUR", "XRP/CHF", "BCH/USD", "BCH/EUR", "BCH/CHF", "EOS/USD", "EOS/EUR", "EOS/CHF"],
       "ReconnectIntervalsMs": 5000,
-      "LoggingLevel": "debug",
+      "LoggingLevel": "info",
       "PublishingIntervalMs": 500,
       "AssetsMapping": []
     },

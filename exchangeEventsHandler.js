@@ -182,16 +182,21 @@ class ExchangeEventsHandler {
             this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
 
             this._storeInTableService(tickPrice)
-            this._sanitizerSocket.write(JSON.stringify(tickPrice))
-
+            //this._sanitizerSocket.write(JSON.stringify(tickPrice))
+            this._publishToSocket("quote", tickPrice)
         }
     }
 
     async _publishTrade(trade) {
         //this._log.debug(`TR: ${trade.marketId} price:${trade.price}, side:${trade.side}, amount:${trade.amount}.`)
-        this._sanitizerSocket.write(JSON.stringify(trade))
+        //this._sanitizerSocket.write(JSON.stringify(trade))
+        this._publishToSocket("trade", trade)
     }
     
+    _publishToSocket(type, data) {
+        this._sanitizerSocket.write(JSON.stringify({ type: type, data: data }) + '\r\n')
+    }
+
     _storeInTableService(data) {
         var entGen = azure.TableUtilities.entityGenerator;
         var entity = {
