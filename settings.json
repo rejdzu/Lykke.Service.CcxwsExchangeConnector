@@ -18,6 +18,7 @@
       "Port": 1234
     },
     "Storage": {
+      "ConnectionString": "UseDevelopmentStorage=true;",
       "TableName": "marketData"
     }
   }

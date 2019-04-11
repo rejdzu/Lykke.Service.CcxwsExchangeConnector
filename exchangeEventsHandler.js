@@ -1,5 +1,4 @@
 const moment = require('moment');
-//const sortedMap = require("sorted-map");
 const path = require('path');
 const LogFactory =  require('./utils/logFactory')
 const mapping = require('./utils/assetPairsMapping')
@@ -7,10 +6,9 @@ const azure = require('azure-storage');
 
 class ExchangeEventsHandler {
     
-    constructor(exchange, sanitizerSocket, tableService, settings) {
+    constructor(exchange, publishers, settings) {
         this._exchange = exchange
-        this._sanitizerSocket = sanitizerSocket
-        this._tableService = tableService
+        this._publishers = publishers;
         this._settings = settings
         this._lastBidAsk = {
             bid: 0,
@@ -179,38 +177,16 @@ class ExchangeEventsHandler {
                 ask: tickPrice.ask 
             }
 
-            //this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
+            this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
 
-            this._storeInTableService(tickPrice)
-            //this._sanitizerSocket.write(JSON.stringify(tickPrice))
-            this._publishToSocket("quote", tickPrice)
+            this._publishers.forEach(p => p.publishBidAsk(tickPrice));
+
         }
     }
 
     async _publishTrade(trade) {
         //this._log.debug(`TR: ${trade.marketId} price:${trade.price}, side:${trade.side}, amount:${trade.amount}.`)
-        //this._sanitizerSocket.write(JSON.stringify(trade))
-        this._publishToSocket("trade", trade)
-    }
-    
-    _publishToSocket(type, data) {
-        this._sanitizerSocket.write(JSON.stringify({ type: type, data: data }) + '\r\n')
-    }
-
-    _storeInTableService(data) {
-        var entGen = azure.TableUtilities.entityGenerator;
-        var entity = {
-            PartitionKey: entGen.String(data.asset),
-            RowKey: entGen.String(data.source + "_" + data.timestamp),
-            OriginalTimestamp: entGen.DateTime(data.timestamp),
-            Bid: entGen.String(data.bid),
-            Ask: entGen.String(data.ask)
-        };
-        this._tableService.insertEntity(this._settings.Storage.TableName, entity, function(error, result, response) {
-            if (!error) {
-                // result contains the ETag for the new entity
-            }
-        });
+        this._publishers.forEach(p => p.publishTrade(trade));
     }
 
     _mapOrderBookToTickPrice(publishingOrderBook) {

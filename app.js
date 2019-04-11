@@ -10,11 +10,11 @@ const packageJson = require('./package.json')
 const exchangeEventsHandler = require('./exchangeEventsHandler')
 const net = require('net');
 const azure = require('azure-storage');
+const SocketPublisher = require('./SocketPublisher');
+const AzureTablePublisher = require('./AzureTablePublisher');
 
 let settings
 let log
-let sanitizerSocket
-let tableService
 
 (async function main() {    
     settings = (await getSettings()).CcxwsExchangeConnector
@@ -23,44 +23,26 @@ let tableService
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
-    createTableService()
+    let publishers = [
+        new SocketPublisher(new net.Socket(), settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
+        new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
+    ];
 
-    createSocketToSanitizer()
-
-    subscribeToExchangesData()
+    subscribeToExchangesData(publishers);
 
     startWebServer()
 })();
 
-async function createTableService() {
-    const connectionString = azure.generateDevelopmentStorageCredentials()
-    tableService = azure.createTableService(connectionString);
-    tableService.createTableIfNotExists(settings.Storage.TableName, function(error, result, response) {
-      if (!error) {
-        // result contains true if created; false if already exists
-        log.debug(`Azure result: ${result}, response:${response}.`)
-      } 
-      else {
-        log.warn(`Azure: ${error}, result: ${result}, response:${response}.`)
-      }
-    });
-}
-
-async function createSocketToSanitizer() {
-    sanitizerSocket = new net.Socket();
-    sanitizerSocket.connect(settings.Sanitizer.Port, settings.Sanitizer.Host, () => log.info('Sanitizer connected on: ' + settings.Sanitizer.Port + ':' + settings.Sanitizer.Host));
-}
-
-async function subscribeToExchangesData() {
+async function subscribeToExchangesData(publishers) {
     const exchanges = settings.Main.Exchanges
     const symbols = settings.Main.Symbols
 
     await Promise.all(exchanges.map (exchangeName =>
-        subscribeToExchangeData(exchangeName, symbols)
+        subscribeToExchangeData(exchangeName, symbols, publishers)
     ))
 }
 
-async function subscribeToExchangeData(exchangeName, symbols) {
+async function subscribeToExchangeData(exchangeName, symbols, publishers) {
 
     const exchange = new ccxt[exchangeName]()
     const exchange_ws = exchangesMapping.MapExchangeCcxtToCcxws(exchangeName)
@@ -80,7 +62,7 @@ async function subscribeToExchangeData(exchangeName, symbols) {
         return
     }
 
-    const handler = new exchangeEventsHandler(exchange, sanitizerSocket, tableService, settings)
+    const handler = new exchangeEventsHandler(exchange, publishers, settings)
 
     exchange_ws.on("l2snapshot", async orderBook => await handler.l2snapshotEventHandle(orderBook))
     exchange_ws.on("l2update", async updateOrderBook => await handler.l2updateEventHandle(updateOrderBook))
