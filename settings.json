@@ -6,7 +6,12 @@
       "ReconnectIntervalsMs": 5000,
       "LoggingLevel": "info",
       "PublishingIntervalMs": 500,
-      "AssetsMapping": []
+      "AssetsMapping": [
+        { 
+          "key": "USDT",
+          "value": "USD"
+        }
+      ]
     },
     "Sanitizer": {
       "Host": "127.0.0.1",

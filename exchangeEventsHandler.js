@@ -1,5 +1,5 @@
 const moment = require('moment');
-const sortedMap = require("sorted-map");
+//const sortedMap = require("sorted-map");
 const path = require('path');
 const LogFactory =  require('./utils/logFactory')
 const mapping = require('./utils/assetPairsMapping')
@@ -16,8 +16,8 @@ class ExchangeEventsHandler {
             bid: 0,
             ask: 0
         }
-        this._orderBooks = new sortedMap()
-        this._lastTimePublished = new sortedMap()
+        this._orderBooks = new Map()
+        this._lastTimePublished = new Map()
         this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel)
     }
 
@@ -51,7 +51,7 @@ class ExchangeEventsHandler {
             const updateAskPrice = parseFloat(ask.price)
             const updateAskSize = parseFloat(ask.size)
 
-            internalOrderBook.asks.del(updateAskPrice)
+            internalOrderBook.asks.delete(updateAskPrice)
             
             if (updateAskSize !== 0)
                 internalOrderBook.asks.set(updateAskPrice, updateAskSize)
@@ -61,7 +61,7 @@ class ExchangeEventsHandler {
             const updateBidPrice = parseFloat(bid.price)
             const updateBidSize = parseFloat(bid.size)
 
-            internalOrderBook.bids.del(updateBidPrice)
+            internalOrderBook.bids.delete(updateBidPrice)
 
             if (updateBidSize !== 0)
                 internalOrderBook.bids.set(updateBidPrice, updateBidSize)
@@ -85,7 +85,7 @@ class ExchangeEventsHandler {
     }
 
     _mapCcxwsToInternal(ccxwsOrderBook) {
-        const asks = new sortedMap();
+        const asks = new Map();
         ccxwsOrderBook.asks.forEach(ask => {
             const askPrice = parseFloat(ask.price)
             const askSize = parseFloat(ask.size)
@@ -93,7 +93,7 @@ class ExchangeEventsHandler {
             asks.set(askPrice, askSize)
         })
     
-        const bids = new sortedMap();
+        const bids = new Map();
         ccxwsOrderBook.bids.forEach(bid => {
             const bidPrice = parseFloat(bid.price)
             const bidSize = parseFloat(bid.size)
@@ -179,7 +179,7 @@ class ExchangeEventsHandler {
                 ask: tickPrice.ask 
             }
 
-            this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
+            //this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
 
             this._storeInTableService(tickPrice)
             //this._sanitizerSocket.write(JSON.stringify(tickPrice))
@@ -206,7 +206,6 @@ class ExchangeEventsHandler {
             Bid: entGen.String(data.bid),
             Ask: entGen.String(data.ask)
         };
-        var that = this
         this._tableService.insertEntity(this._settings.Storage.TableName, entity, function(error, result, response) {
             if (!error) {
                 // result contains the ETag for the new entity
