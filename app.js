@@ -25,7 +25,7 @@ let log
 
     let publishers = [
         new SocketPublisher(new net.Socket(), settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
-        new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
+        // new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
     ];
 
     subscribeToExchangesData(publishers);
