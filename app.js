@@ -25,7 +25,7 @@ let log
 
     let publishers = [
         new SocketPublisher(new net.Socket(), settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
-        // new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
+        new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
     ];
 
     subscribeToExchangesData(publishers);
@@ -69,6 +69,10 @@ async function subscribeToExchangeData(exchangeName, symbols, publishers) {
     exchange_ws.on("trade", async trade => await handler.tradeEventHandler(trade))
 
     availableMarkets.forEach(market => {
+        // Exchanges that provide the initial snapshot are unreliable with the updates endpoint
+        // For those exchanges, we connect to the full snapshot endpoint and consume that directly
+        // so we are sure to keep a complete view of the order book
+
         if (exchange_ws.hasLevel2Snapshots){
             exchange_ws.subscribeLevel2Snapshots(market)
         } else {

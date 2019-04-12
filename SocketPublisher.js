@@ -15,7 +15,7 @@ class SocketPublisher {
 
     async publishBidAsk(tick) {
         return new Promise((resolve, reject) => {
-            this._socket.write(JSON.stringify(tick), (err) => {
+            this._socket.write(this._createFrame("quote", tick), (err) => {
                 err ? reject(err) : resolve
             });
         });
@@ -23,10 +23,19 @@ class SocketPublisher {
 
     async publishTrade(trade) {
         return new Promise((resolve, reject) => {
-            this._socket.write(JSON.stringify(trade), (err) => {
+            this._socket.write(this._createFrame("trade", trade), (err) => {
                 err ? reject(err) : resolve
             });
         });
+    }
+
+    _createFrame(type, data) {
+        const obj = {
+            type: type,
+            data: data
+        }
+
+        return `${JSON.stringify(obj)}\n`
     }
 }
 

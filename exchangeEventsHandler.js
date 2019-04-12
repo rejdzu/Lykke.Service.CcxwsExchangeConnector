@@ -10,10 +10,7 @@ class ExchangeEventsHandler {
         this._exchange = exchange
         this._publishers = publishers;
         this._settings = settings
-        this._lastBidAsk = {
-            bid: 0,
-            ask: 0
-        }
+        this._latestBidAskMap = new Map()
         this._orderBooks = new Map()
         this._lastTimePublished = new Map()
         this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel)
@@ -28,8 +25,13 @@ class ExchangeEventsHandler {
         if (!lastTimePublished || moment() - lastTimePublished > this._settings.Main.PublishingIntervalMs)
         {
             const publishingOrderBook = this._mapInternalToPublishing(internalOrderBook)
+
             await this._publishOrderBook(publishingOrderBook)
-            await this._publishTickPrice(publishingOrderBook)
+            
+            if(this._updateLatestBidAsk(publishingOrderBook)) {
+                const tick = this._latestBidAskMap.get(publishingOrderBook.asset)
+                await this._publishTickPrice(tick)
+            }
 
             this._lastTimePublished.set(key, moment.utc())
         }
@@ -71,8 +73,13 @@ class ExchangeEventsHandler {
         if (!lastTimePublished || moment() - lastTimePublished > 1000)
         {
             const publishingOrderBook = this._mapInternalToPublishing(internalOrderBook)
+            
             await this._publishOrderBook(publishingOrderBook)
-            await this._publishTickPrice(publishingOrderBook)
+            
+            if(this._updateLatestBidAsk(publishingOrderBook)) {
+                const tick = this._latestBidAskMap.get(publishingOrderBook.asset)
+                await this._publishTickPrice(tick)
+            }
 
             this._lastTimePublished.set(key, moment.utc())
         }
@@ -82,22 +89,39 @@ class ExchangeEventsHandler {
         await this._publishTrade(trade)
     }
 
+    _updateLatestBidAsk(orderBook) {
+        const tickPrice = this._mapOrderBookToTickPrice(orderBook)
+        if (!tickPrice) {
+            return false
+        }
+    
+        const asset = tickPrice.asset
+        const latestBidAsk = this._latestBidAskMap.get(asset)
+
+        if(!latestBidAsk || tickPrice.bid != latestBidAsk.bid || tickPrice.ask != latestBidAsk.ask) {
+            this._latestBidAskMap.set(asset, tickPrice)
+            return true
+        }
+
+        return false
+    }
+
     _mapCcxwsToInternal(ccxwsOrderBook) {
-        const asks = new Map();
-        ccxwsOrderBook.asks.forEach(ask => {
-            const askPrice = parseFloat(ask.price)
-            const askSize = parseFloat(ask.size)
+        const asks = new Map(
+            ccxwsOrderBook.asks.map(ask => {
+                const askPrice = parseFloat(ask.price)
+                const askSize = parseFloat(ask.size)
+                return [askPrice, askSize]
+            })
+        )
     
-            asks.set(askPrice, askSize)
-        })
-    
-        const bids = new Map();
-        ccxwsOrderBook.bids.forEach(bid => {
-            const bidPrice = parseFloat(bid.price)
-            const bidSize = parseFloat(bid.size)
-    
-            bids.set(bidPrice, bidSize)
-        })
+        const bids = new Map(
+            ccxwsOrderBook.bids.map(bid => {
+                const bidPrice = parseFloat(bid.price)
+                const bidSize = parseFloat(bid.size)
+                return [bidPrice, bidSize]
+            })
+        )
     
         const internalOrderBook = {}
         internalOrderBook.source = ccxwsOrderBook.exchange
@@ -165,23 +189,13 @@ class ExchangeEventsHandler {
         //this._log.debug(`OB: ${orderBook.source} ${orderBook.asset}, bids:${orderBook.bids.length}, asks:${orderBook.asks.length}, best bid:${orderBook.bids[0].price}, best ask:${orderBook.asks[0].price}.`)
     }
     
-    async _publishTickPrice(orderBook) {
-        const tickPrice = this._mapOrderBookToTickPrice(orderBook)
+    async _publishTickPrice(tickPrice) {
         if (!tickPrice) {
             return
         }
-    
-        if(tickPrice.bid != this._lastBidAsk.bid || tickPrice.ask != this._lastBidAsk.ask) {
-            this._lastBidAsk = { 
-                bid: tickPrice.bid, 
-                ask: tickPrice.ask 
-            }
 
-            this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
-
-            this._publishers.forEach(p => p.publishBidAsk(tickPrice));
-
-        }
+        this._log.debug(`TP: ${tickPrice.source} ${tickPrice.asset}, bid:${tickPrice.bid}, ask:${tickPrice.ask}.`)
+        this._publishers.forEach(p => p.publishBidAsk(tickPrice));
     }
 
     async _publishTrade(trade) {
