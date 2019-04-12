@@ -198,9 +198,27 @@ class ExchangeEventsHandler {
         this._publishers.forEach(p => p.publishBidAsk(tickPrice));
     }
 
-    async _publishTrade(trade) {
+    async _publishTrade(ccxwsTrade) {
+        const marketId = ccxwsTrade.base + '/' + ccxwsTrade.quote;
+        const symbol = mapping.MapAssetPairBackward(marketId, this._settings);
+
+        const [base, quote] = symbol.split('/');
+        const suffixConfig = this._settings.Main.ExchangesNamesSuffix;
+        const suffix = suffixConfig ? suffixConfig : "(w)";
+        const source = this._exchange.name.replace(this._exchange.version, "").trim();
+
+        const publishingTrade = {
+            source: source + suffix,
+            asset: base + quote,
+            // assetPair: { 'base': base, 'quote': quote },
+            side: ccxwsTrade.side,
+            price: ccxwsTrade.price,
+            amount: ccxwsTrade.amount,
+            timestamp: new Date(ccxwsTrade.unix)
+        };
+
         //this._log.debug(`TR: ${trade.marketId} price:${trade.price}, side:${trade.side}, amount:${trade.amount}.`)
-        this._publishers.forEach(p => p.publishTrade(trade));
+        this._publishers.forEach(p => p.publishTrade(publishingTrade));
     }
 
     _mapOrderBookToTickPrice(publishingOrderBook) {
