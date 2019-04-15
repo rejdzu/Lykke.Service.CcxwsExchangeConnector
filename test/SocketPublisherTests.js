@@ -20,7 +20,7 @@ describe('SocketPublisher', () => {
         timestamp: '2019-04-11T12:03:24+00:00'
     };
     const fakeSocket = {
-        connect: sinon.fake(),
+        writable: true,
         write: sinon.spy()
     };
 
@@ -28,7 +28,6 @@ describe('SocketPublisher', () => {
 
     // Reset fakes before each test
     beforeEach(async () => {
-        fakeSocket.connect.resetHistory();
         fakeSocket.write.resetHistory();
     });
 

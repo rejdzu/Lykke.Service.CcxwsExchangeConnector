@@ -9,11 +9,13 @@ class SocketPublisher {
     constructor(socket, port, host, settings) {
         this._socket = socket;
         this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel);
-
-        this._socket.connect(port, host, () => this._log.info('Sanitizer connected on: ' + port + ':' + host));
     }
 
     async publishBidAsk(tick) {
+        if (!this._socket.writable) {
+            return;
+        }
+
         return new Promise((resolve, reject) => {
             this._socket.write(this._createFrame("quote", tick), (err) => {
                 err ? reject(err) : resolve
@@ -22,6 +24,10 @@ class SocketPublisher {
     }
 
     async publishTrade(trade) {
+        if (!this._socket.writable) {
+            return;
+        }
+
         return new Promise((resolve, reject) => {
             this._socket.write(this._createFrame("trade", trade), (err) => {
                 err ? reject(err) : resolve

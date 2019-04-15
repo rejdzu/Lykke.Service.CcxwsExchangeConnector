@@ -23,8 +23,10 @@ let log
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
+    const socket = setupSocketConnection();
+
     let publishers = [
-        new SocketPublisher(new net.Socket(), settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
+        new SocketPublisher(socket, settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
         new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
     ];
 
@@ -32,6 +34,28 @@ let log
 
     startWebServer()
 })();
+
+function setupSocketConnection() {
+    const port = settings.Sanitizer.Port;
+    const host = settings.Sanitizer.Host;
+
+    const socket = new net.Socket();
+    const connectSocket = () => socket.connect(port, host);
+
+    socket.once("connect", () => log.info('Sanitizer connected on: ' + port + ':' + host));
+
+    socket.on("error", (err) => {
+        if(err.code === 'ECONNREFUSED' ||
+            err.code === 'ECONNRESET' ||
+            err.code === 'EPIPE') {
+            log.info(`Trying to reconnect to sanitizer in ${settings.Sanitizer.ReconnectionIntervalMs}ms`);
+            setTimeout(connectSocket, settings.Sanitizer.ReconnectionIntervalMs);
+        }
+    });
+
+    connectSocket();
+    return socket;
+}
 
 async function subscribeToExchangesData(publishers) {
     const exchanges = settings.Main.Exchanges
@@ -130,7 +154,7 @@ function startWebServer() {
         res.send(JSON.stringify(settings, null, 4))
     })
 
-    const server = app.listen(5000, function () {
+    const server = app.listen(5100, function () {
        let host = server.address().address
        const port = server.address().port
 

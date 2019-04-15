@@ -15,7 +15,8 @@
     },
     "Sanitizer": {
       "Host": "127.0.0.1",
-      "Port": 1234
+      "Port": 1234,
+      "ReconnectionIntervalMs": 5000
     },
     "Storage": {
       "ConnectionString": "UseDevelopmentStorage=true;",
