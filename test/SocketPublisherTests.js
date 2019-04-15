@@ -5,7 +5,6 @@ const assert = require('chai').assert;
 const describe = require('mocha').describe;
 const sinon = require('sinon');
 const SocketPublisher = require('../SocketPublisher');
-const net = require('net');
 
 const settings = {
     Main: { LoggingLevel: 'INFO', }
@@ -19,6 +18,18 @@ describe('SocketPublisher', () => {
         ask: "4300",
         timestamp: '2019-04-11T12:03:24+00:00'
     };
+
+    const expectedFrame = {
+        type: "quote",
+        data: {
+            source: "Bitstamp(w)",
+            asset: "BTCUSD",
+            bid: "3900",
+            ask: "4300",
+            timestamp: '2019-04-11T12:03:24+00:00'
+        }
+    };
+
     const fakeSocket = {
         writable: true,
         write: sinon.spy()
@@ -36,7 +47,7 @@ describe('SocketPublisher', () => {
             socketPublisher.publishBidAsk(tick);
 
             assert(fakeSocket.write.calledOnce, "The socket should be written to exactly once");
-            assert.equal(fakeSocket.write.args[0][0], JSON.stringify(tick),
+            assert.equal(fakeSocket.write.args[0][0], JSON.stringify(expectedFrame) + '\n',
                          "The message should be the stringified input");
         });
     });
@@ -50,11 +61,22 @@ describe('SocketPublisher', () => {
             amount: 1
         };
 
+        const expectedFrame = {
+            type: "trade",
+            data: {
+                exchange: 'bitstamp',
+                marketId: 'BTC/USD',
+                side: 'buy',
+                price: '4300',
+                amount: 1
+            }
+        };
+
         it("writes a stringified version of the given message to the socket", () => {
             socketPublisher.publishTrade(trade);
 
             assert(fakeSocket.write.calledOnce, "The socket should be written to exactly once");
-            assert.equal(fakeSocket.write.args[0][0], JSON.stringify(trade),
+            assert.equal(fakeSocket.write.args[0][0], JSON.stringify(expectedFrame) + '\n',
                 "The message should be the stringified input");
         });
     });
