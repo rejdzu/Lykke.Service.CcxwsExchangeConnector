@@ -1,7 +1,7 @@
-const ccxws = require("ccxws");
-const ccxt = require('ccxt');
+const ccxws = require("ccxws")
+const ccxt = require('ccxt')
 const express = require('express')
-const path = require('path');
+const path = require('path')
 const LogFactory =  require('./utils/logFactory')
 const getSettings = require('./settings/settings')
 const assetPairsMapping = require('./utils/assetPairsMapping')
@@ -9,9 +9,11 @@ const exchangesMapping = require('./utils/exchangesMapping')
 const packageJson = require('./package.json')
 const exchangeEventsHandler = require('./exchangeEventsHandler')
 const net = require('net');
-const azure = require('azure-storage');
-const SocketPublisher = require('./SocketPublisher');
-const AzureTablePublisher = require('./AzureTablePublisher');
+const azure = require('azure-storage')
+const crypto = require('crypto')
+const SocketPublisher = require('./SocketPublisher')
+const AzureTablePublisher = require('./AzureTablePublisher')
+const FakeExchangeClient = require('./utils/fakeExchangeClient/fakeExchangeClient')
 
 let settings
 let log
@@ -23,14 +25,18 @@ let log
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
-    const socket = setupSocketConnection();
+    const socket = setupSocketConnection()
 
     let publishers = [
         new SocketPublisher(socket, settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
-        new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
+        //new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
     ];
 
-    subscribeToExchangesData(publishers);
+    if(settings.FakeExchanges && settings.FakeExchanges.UseFakeExchanges) {
+        subscribeToFakeExchangesData(publishers)
+    } else {
+        subscribeToExchangesData(publishers)
+    }
 
     startWebServer()
 })();
@@ -55,6 +61,48 @@ function setupSocketConnection() {
 
     connectSocket();
     return socket;
+}
+
+async function subscribeToFakeExchangesData(publishers) {
+    const exchanges = generateRandomExchanges()
+    const symbols = generateRandomSymbols()
+
+    await Promise.all(exchanges.map (exchangeName =>
+        subscribeToFakeExchangeData(exchangeName, symbols, publishers)
+    ))
+}
+
+async function subscribeToFakeExchangeData(exchangeName, symbols, publishers) {
+    const exchange = {
+        name: exchangeName,
+        version: 1
+    }
+
+    const exchange_ws = new FakeExchangeClient(exchange.name)
+    const availableMarkets = symbols.map(x => { 
+        const split = x.split('/')
+        return { id: x, base: split[0], quote: split[1] }
+     })
+
+    const handler = new exchangeEventsHandler(exchange, publishers, settings)
+
+    exchange_ws.on("l2snapshot", async orderBook => await handler.l2snapshotEventHandle(orderBook))
+    exchange_ws.on("l2update", async updateOrderBook => await handler.l2updateEventHandle(updateOrderBook))
+    exchange_ws.on("trade", async trade => await handler.tradeEventHandler(trade))
+
+    availableMarkets.forEach(market => {
+        // Exchanges that provide the initial snapshot are unreliable with the updates endpoint
+        // For those exchanges, we connect to the full snapshot endpoint and consume that directly
+        // so we are sure to keep a complete view of the order book
+
+        if (exchange_ws.hasLevel2Snapshots){
+            exchange_ws.subscribeLevel2Snapshots(market)
+        } else {
+            exchange_ws.subscribeLevel2Updates(market)
+        }
+
+        exchange_ws.subscribeTrades(market)
+    });
 }
 
 async function subscribeToExchangesData(publishers) {
@@ -105,6 +153,45 @@ async function subscribeToExchangeData(exchangeName, symbols, publishers) {
 
         exchange_ws.subscribeTrades(market)
     });
+}
+
+function generateRandomExchanges() {
+    const exchangesCount = settings.FakeExchanges.ExchangesCount
+    const exchanges = new Set()
+    
+    while(exchanges.size < exchangesCount) {
+        const value = randomString(10, 'abcdefghijklmnopqrstuwxyz')
+        exchanges.add(value);
+    }
+
+    return Array.from(exchanges)
+}
+
+function generateRandomSymbols() {
+    const symbolsCount = settings.FakeExchanges.SymbolsCount
+    const symbols = new Set()
+    
+    while(symbols.size < symbolsCount) {
+        const value1 = randomString(3, 'ABCDEFGHIJKLMNOPQRSTUWXYZ')
+        const value2 = randomString(3, 'ABCDEFGHIJKLMNOPQRSTUWXYZ')
+        symbols.add(value1 + "/" + value2);
+    }
+
+    return Array.from(symbols)
+}
+
+function randomString (howMany, chars) {
+    chars = chars || 'abcdefghijklmnopqrstuwxyzABCDEFGHIJKLMNOPQRSTUWXYZ0123456789';
+    const rnd = crypto.randomBytes(howMany)
+    const value = new Array(howMany)
+    const len = Math.min(256, chars.length)
+    const d = 256 / len
+
+    for (var i = 0; i < howMany; i++) {
+        value[i] = chars[Math.floor(rnd[i] / d)]
+    };
+
+    return value.join('');
 }
 
 function getAvailableMarketsForExchange(exchange, symbols) {

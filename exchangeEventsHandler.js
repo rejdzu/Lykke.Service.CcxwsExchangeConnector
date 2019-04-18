@@ -17,6 +17,7 @@ class ExchangeEventsHandler {
     }
 
     async l2snapshotEventHandle(orderBook) {
+        //this._log.info("l2snapshot received")
         const key = orderBook.marketId
         const internalOrderBook = this._mapCcxwsToInternal(orderBook)
         this._orderBooks.set(key, internalOrderBook)
@@ -38,6 +39,7 @@ class ExchangeEventsHandler {
     }
 
     async l2updateEventHandle(updateOrderBook) {
+        //this._log.info("l2update received")
         const key = updateOrderBook.marketId
 
         const internalOrderBook = this._orderBooks.get(key)
@@ -86,6 +88,7 @@ class ExchangeEventsHandler {
     }
 
     async tradeEventHandler(trade) {
+        //this._log.info("trade received")
         await this._publishTrade(trade)
     }
 

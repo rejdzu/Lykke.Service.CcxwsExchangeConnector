@@ -21,6 +21,11 @@
     "Storage": {
       "ConnectionString": "UseDevelopmentStorage=true;",
       "TableName": "marketData"
+    },
+    "FakeExchanges": {
+      "UseFakeExchanges": true,
+      "ExchangesCount": 200,
+      "SymbolsCount": 100
     }
   }
 }
