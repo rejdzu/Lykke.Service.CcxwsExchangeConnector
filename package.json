@@ -6,8 +6,8 @@
   "dependencies": {
     "amqplib": "^0.5.2",
     "azure-storage": "^2.10.2",
-    "ccxt": "^1.17.477",
-    "ccxws": "^0.22.0",
+    "ccxt": "^1.18.489",
+    "ccxws": "^0.23.0",
     "express": "^4.16.4",
     "fs": "0.0.1-security",
     "moment": "^2.22.2",
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "chai": "^4.2.0",
-    "mocha": "^6.1.2",
+    "mocha": "^6.1.4",
     "sinon": "^7.3.1"
   },
   "scripts": {

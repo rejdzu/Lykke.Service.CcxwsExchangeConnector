@@ -120,7 +120,7 @@ class FakeExchangeClient extends EventEmitter {
   _connect() {
     let nextTick = function() {
       this._generateRandomEvent();
-      setTimeout(nextTick,  Math.random() * 300);
+      setTimeout(nextTick,  Math.random() * 200);
     }
     nextTick = nextTick.bind(this)
     nextTick();

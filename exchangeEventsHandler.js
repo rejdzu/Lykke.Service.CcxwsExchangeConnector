@@ -92,6 +92,21 @@ class ExchangeEventsHandler {
         await this._publishTrade(trade)
     }
 
+    async ccxtTradeEventHandler(trade) {
+        const source = this._exchange.name.replace(this._exchange.version, "").trim();
+
+        const publishingTrade = {
+            source: source,
+            asset: trade.symbol.replace('/', ''),
+            side: trade.side,
+            price: trade.price,
+            amount: trade.amount,
+            timestamp: new Date(trade.timestamp)
+        };
+
+        this._publishers.forEach(p => p.publishTrade(publishingTrade));
+    }
+
     _updateLatestBidAsk(orderBook) {
         const tickPrice = this._mapOrderBookToTickPrice(orderBook)
         if (!tickPrice) {
@@ -206,12 +221,10 @@ class ExchangeEventsHandler {
         const symbol = mapping.MapAssetPairBackward(marketId, this._settings);
 
         const [base, quote] = symbol.split('/');
-        const suffixConfig = this._settings.Main.ExchangesNamesSuffix;
-        const suffix = suffixConfig ? suffixConfig : "(w)";
         const source = this._exchange.name.replace(this._exchange.version, "").trim();
 
         const publishingTrade = {
-            source: source + suffix,
+            source: source,
             asset: base + quote,
             // assetPair: { 'base': base, 'quote': quote },
             side: ccxwsTrade.side,

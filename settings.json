@@ -1,16 +1,66 @@
 {
   "CcxwsExchangeConnector": {
     "Main": {
-      "Exchanges": ["kraken", "bitstamp", "binance", "poloniex", "bitflyer", "bittrex", "coinex", "coinbasepro"],
-      "Symbols": ["BTC/USD", "BTC/EUR", "BTC/CHF", "ETH/USD", "ETH/EUR", "ETH/CHF", "LTC/USD", "LTC/EUR", "LTC/CHF", "XRP/USD", "XRP/EUR", "XRP/CHF", "BCH/USD", "BCH/EUR", "BCH/CHF", "EOS/USD", "EOS/EUR", "EOS/CHF"],
-      "ReconnectIntervalsMs": 5000,
+      "Exchanges": [
+        "binance",
+        "bitfinex",
+        "bitflyer",
+        "bitmex",
+        "bitstamp",
+        "bittrex",
+        "coinex",
+        "coinbasepro",
+        "ethfinex",
+        "gateio",
+        "gemini",
+        "huobipro",
+        "kraken",
+        "okex",
+        "poloniex",
+        "zb"
+      ],
+      "Symbols": [
+        "BTC/USD",
+        "BTC/EUR",
+        "BTC/CHF",
+        "BTC/USDT",
+        "ETH/USD",
+        "ETH/EUR",
+        "ETH/CHF",
+        "ETH/USDT",
+        "LTC/USD",
+        "LTC/EUR",
+        "LTC/CHF",
+        "LTC/USDT",
+        "XRP/USD",
+        "XRP/EUR",
+        "XRP/CHF",
+        "XRP/USDT",
+        "BCH/USD",
+        "BCH/EUR",
+        "BCH/CHF",
+        "BCH/USDT",
+        "EOS/USD",
+        "EOS/EUR",
+        "EOS/CHF",
+        "EOS/USDT",
+        "ADA/USD",
+        "ADA/EUR",
+        "ADA/CHF",
+        "ADA/USDT",
+        "DASH/USD",
+        "DASH/EUR",
+        "DASH/CHF",
+        "DASH/USDT",
+        "IOTA/USD",
+        "IOTA/EUR",
+        "IOTA/CHF",
+        "IOTA/USDT"
+      ],
+      "ReconnectIntervalMs": 5000,
       "LoggingLevel": "info",
       "PublishingIntervalMs": 500,
       "AssetsMapping": [
-        { 
-          "key": "USDT",
-          "value": "USD"
-        }
       ]
     },
     "Sanitizer": {
@@ -23,7 +73,7 @@
       "TableName": "marketData"
     },
     "FakeExchanges": {
-      "UseFakeExchanges": true,
+      "UseFakeExchanges": false,
       "ExchangesCount": 200,
       "SymbolsCount": 100
     }

@@ -14,15 +14,21 @@ function MapExchangeCcxtToCcxws(ccxtExchangeName){
             return new ccxws.Bitstamp()
         case 'bittrex':
             return new ccxws.Bittrex()
+        case 'cex':
+            return new ccxws.cex();
         case 'coinex':
             return new ccxws.coinex()
-        case 'gdax':
-            return new ccxws.GDAX()
+        case 'coinbasepro':
+            return new ccxws.coinbasepro()
+        case 'ethfinex':
+            return new ccxws.ethfinex()
+        case 'gateio':
+            return new ccxws.gateio()
         case 'gemini':
             return new ccxws.Gemini()
         case 'hitbtc':
             return new ccxws.HitBTC()
-        case 'huobi':
+        case 'huobipro':
             return new ccxws.Huobi()
         case 'kraken':
             return new ccxws.Kraken()
@@ -30,6 +36,8 @@ function MapExchangeCcxtToCcxws(ccxtExchangeName){
             return new ccxws.OKEx()
         case 'poloniex':
             return new ccxws.Poloniex()
+        case 'upbit':
+            return new ccxws.upbit()
         case 'zb':
             return new ccxws.zb()
         default:

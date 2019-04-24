@@ -115,8 +115,8 @@ async function subscribeToExchangesData(publishers) {
 }
 
 async function subscribeToExchangeData(exchangeName, symbols, publishers) {
-
     const exchange = new ccxt[exchangeName]()
+    // const exchange_ws = new ccxws[exchangeName]()
     const exchange_ws = exchangesMapping.MapExchangeCcxtToCcxws(exchangeName)
     exchange_ws.reconnectIntervalMs = settings.Main.ReconnectIntervalMs
 
@@ -150,6 +150,17 @@ async function subscribeToExchangeData(exchangeName, symbols, publishers) {
         } else {
             exchange_ws.subscribeLevel2Updates(market)
         }
+
+        exchange.fetchTrades(market.symbol, undefined)
+            .then(async (trades) => {
+                if (trades.length <= 0) {
+                    return
+                }
+
+                let latestTrade = trades.sort((a, b) => b.timestamp - a.timestamp)[0];
+                log.info(`Got latest trade for ${market.id} from ${exchangeName}`);
+                await handler.ccxtTradeEventHandler(latestTrade);
+            });
 
         exchange_ws.subscribeTrades(market)
     });
