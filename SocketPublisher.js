@@ -17,7 +17,7 @@ class SocketPublisher {
         }
 
         return new Promise((resolve, reject) => {
-            this._socket.write(this._createFrame("quote", tick), (err) => {
+            this._socket.write(this._createBinaryFrame("order", tick), (err) => {
                 err ? reject(err) : resolve
             });
         });
@@ -29,7 +29,7 @@ class SocketPublisher {
         }
 
         return new Promise((resolve, reject) => {
-            this._socket.write(this._createFrame("trade", trade), (err) => {
+            this._socket.write(this._createBinaryFrame("trade", trade), (err) => {
                 err ? reject(err) : resolve
             });
         });
@@ -42,6 +42,24 @@ class SocketPublisher {
         }
 
         return `${JSON.stringify(obj)}\n`
+    }
+
+    _createBinaryFrame(type, data) {
+        const obj = {
+            type: type,
+            data: data
+        }
+
+        const payload = JSON.stringify(obj)
+        const payloadLength = Buffer.byteLength(payload)
+        const frameLength = payloadLength + 4
+
+        const buffer = Buffer.alloc(frameLength)
+
+        var offset = buffer.writeInt32BE(payloadLength, 0)
+        buffer.write(payload, offset)
+
+        return buffer
     }
 }
 
