@@ -14,6 +14,7 @@ const crypto = require('crypto')
 const SocketPublisher = require('./SocketPublisher')
 const AzureTablePublisher = require('./AzureTablePublisher')
 const FakeExchangeClient = require('./utils/fakeExchangeClient/fakeExchangeClient')
+const ReconnectingSocket = require('./ReconnectingSocket');
 
 let settings
 let log
@@ -25,10 +26,18 @@ let log
     process.on('uncaughtException',  e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
     process.on('unhandledRejection', e => log.warn(`Unhandled error: ${e}, ${e.stack}.`))
 
-    const socket = setupSocketConnection()
+    // const socket = await setupSocketConnection();
+    const socket = new ReconnectingSocket(
+        settings.Sanitizer.Port,
+        settings.Sanitizer.Host,
+        settings.Sanitizer.ReconnectionIntervalMs,
+        settings.Sanitizer.TimeoutMs,
+        settings.Main.LoggingLevel
+    );
+    await socket.setup();
 
     let publishers = [
-        new SocketPublisher(socket, settings.Sanitizer.Port, settings.Sanitizer.Host, settings),
+        new SocketPublisher(socket, settings),
         //new AzureTablePublisher(azure.createTableService(settings.Storage.ConnectionString), settings)
     ];
 
@@ -41,27 +50,54 @@ let log
     startWebServer()
 })();
 
-function setupSocketConnection() {
-    const port = settings.Sanitizer.Port;
-    const host = settings.Sanitizer.Host;
-
-    const socket = new net.Socket();
-    const connectSocket = () => socket.connect(port, host);
-
-    socket.once("connect", () => log.info('Sanitizer connected on: ' + port + ':' + host));
-
-    socket.on("error", (err) => {
-        if(err.code === 'ECONNREFUSED' ||
-            err.code === 'ECONNRESET' ||
-            err.code === 'EPIPE') {
-            log.info(`Trying to reconnect to sanitizer in ${settings.Sanitizer.ReconnectionIntervalMs}ms`);
-            setTimeout(connectSocket, settings.Sanitizer.ReconnectionIntervalMs);
-        }
-    });
-
-    connectSocket();
-    return socket;
-}
+// function setupSocketConnection() {
+//     const port = settings.Sanitizer.Port;
+//     const host = settings.Sanitizer.Host;
+//
+//     const socket = new net.Socket();
+//
+//     // const connectSocket = () => socket.connect(port, host);
+//     const connectSocket = () => new Promise((resolve, reject) => {
+//
+//         socket.on("error", (err) => {
+//             if (err.code === 'EALREADY') {
+//                 log.info(`Got error but already reconnecting, skipping`);
+//                 return;
+//             }
+//             log.warn(`Got error (${err.code}): ${err}. Trying to reconnect to sanitizer.`);
+//             setTimeout(async () => await connectSocket(), settings.Sanitizer.ReconnectionIntervalMs);
+//         });
+//         socket.on("timeout", (err) => {
+//             // socket.destroy();
+//             log.info(`Trying to reconnect to sanitizer in ${settings.Sanitizer.ReconnectionIntervalMs}ms`);
+//             setTimeout(async () => await connectSocket(), settings.Sanitizer.ReconnectionIntervalMs);
+//         });
+//
+//         socket.on("close", (err) => {
+//             console.log("close")
+//         });
+//
+//         socket.on("connect", () => {
+//             log.info('Sanitizer connected on: ' + port + ':' + host);
+//
+//             socket.setTimeout(1000);
+//             resolve(socket);
+//         });
+//
+//         socket.connect(port, host)
+//     });
+//     // socket.once("connect", () => log.info('Sanitizer connected on: ' + port + ':' + host));
+//
+//     //
+//     // return new Promise((resolve, reject) => {
+//     //     socket.connect(port, host, () => {
+//     //         log.info('Sanitizer connected on: ' + port + ':' + host);
+//     //         resolve(socket);
+//     //     });
+//     // });
+//
+//     return connectSocket();
+// }
 
 async function subscribeToFakeExchangesData(publishers) {
     const exchanges = generateRandomExchanges()

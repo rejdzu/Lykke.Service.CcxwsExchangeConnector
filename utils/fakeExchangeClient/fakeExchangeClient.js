@@ -80,7 +80,7 @@ class FakeExchangeClient extends EventEmitter {
   _subscribe(market, msg, map) {
     let remote_id = market.id.toLowerCase();
     if (!map.has(remote_id)) {
-      winston.info(msg, this._name, remote_id);
+      // winston.info(msg, this._name, remote_id);
       map.set(remote_id, market);
       this._reconnect();
     }

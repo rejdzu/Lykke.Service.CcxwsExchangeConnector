@@ -6,33 +6,25 @@ const LogFactory = require('./utils/logFactory');
 
 class SocketPublisher {
 
-    constructor(socket, port, host, settings) {
+    constructor(socket, settings) {
         this._socket = socket;
         this._log = LogFactory.create(path.basename(__filename), settings.Main.LoggingLevel);
     }
 
     async publishBidAsk(tick) {
-        if (!this._socket.writable) {
+        if (this._socket.connecting || !this._socket.writable) {
             return;
         }
 
-        return new Promise((resolve, reject) => {
-            this._socket.write(this._createBinaryFrame("order", tick), (err) => {
-                err ? reject(err) : resolve
-            });
-        });
+        this._socket.write(this._createBinaryFrame("order", tick));
     }
 
     async publishTrade(trade) {
-        if (!this._socket.writable) {
+        if (this._socket.connecting || !this._socket.writable) {
             return;
         }
 
-        return new Promise((resolve, reject) => {
-            this._socket.write(this._createBinaryFrame("trade", trade), (err) => {
-                err ? reject(err) : resolve
-            });
-        });
+        this._socket.write(this._createBinaryFrame("trade", trade));
     }
 
     _createFrame(type, data) {
