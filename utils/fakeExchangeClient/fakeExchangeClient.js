@@ -1,6 +1,5 @@
 const { EventEmitter } = require("events");
 const winston = require("winston");
-const { wait } = require("./util");
 const Ticker = require("./ticker");
 const Trade = require("./trade");
 const Level2Point = require("./level2-point");
@@ -104,7 +103,7 @@ class FakeExchangeClient extends EventEmitter {
     this._reconnectDebounce = setTimeout(() => {
       this._close();
       this._connect();
-    }, 100);
+    }, 1000);
   }
 
   /**
@@ -118,16 +117,16 @@ class FakeExchangeClient extends EventEmitter {
    * the subscribed markets.
    */
   _connect() {
-    let nextTick = function() {
-      this._generateRandomEvent();
-      setTimeout(nextTick,  Math.random() * 200);
-    }
-    nextTick = nextTick.bind(this)
-    nextTick();
+    this._runEvents();
   }
 
   ////////////////////////////////////////////
   // ABSTRACT
+
+  _runEvents() {
+    this._generateRandomEvent();
+    setTimeout(this._runEvents.bind(this), Math.random() * 200);
+  }
 
   _onConnected() {
     this._watcher.start();
@@ -160,9 +159,9 @@ class FakeExchangeClient extends EventEmitter {
   }
 
   _getRandomInt(min, max) {
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+    let minval = Math.ceil(min);
+    let maxval = Math.floor(max);
+    return Math.floor(Math.random() * (maxval - minval + 1)) + minval;
   }
 
   _generateAmount() {
@@ -184,10 +183,14 @@ class FakeExchangeClient extends EventEmitter {
     return array
   }
 
+  _getRandomMarketFromMap(map) {
+    const index = this._getRandomInt(0, map.size - 1)
+    const symbol = Array.from(map.keys())[index]
+    return map.get(symbol.toLowerCase());
+  }
+
   _constructRawTrade() {
-    const index = this._getRandomInt(0, this._tradeSubs.size - 1)
-    const symbol = Array.from(this._tradeSubs)[index]
-    const market = this._tradeSubs.get(symbol[0].toLowerCase());
+    const market = this._getRandomMarketFromMap(this._tradeSubs);
     const unix = new Date();
     const amount = this._generateAmount()
     const price = this._generatePrice()
@@ -207,9 +210,7 @@ class FakeExchangeClient extends EventEmitter {
   }
 
   _constructLevel2(count, map) {
-    const index = this._getRandomInt(0, map.size - 1)
-    const symbol = Array.from(map)[index]
-    const market = map.get(symbol[0].toLowerCase());
+    const market = this._getRandomMarketFromMap(map)
     const sequenceId = "";
     const asks = this._generateLevel2PointArray(count)
     const bids = this._generateLevel2PointArray(count)

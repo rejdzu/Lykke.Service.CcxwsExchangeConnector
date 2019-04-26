@@ -16,7 +16,9 @@ class SocketPublisher {
             return;
         }
 
-        this._socket.write(this._createBinaryFrame("order", tick));
+        var msg = this._createBinaryFrame("order", tick);
+        this._socket.write(msg);
+        msg = null;
     }
 
     async publishTrade(trade) {
@@ -24,7 +26,9 @@ class SocketPublisher {
             return;
         }
 
-        this._socket.write(this._createBinaryFrame("trade", trade));
+        var msg = this._createBinaryFrame("trade", trade);
+        this._socket.write(msg);
+        msg = null;
     }
 
     _createFrame(type, data) {
